@@ -20,6 +20,16 @@
 
     <!-- 底部设置区 -->
     <div class="sidebar-footer">
+      <!-- 账号区 -->
+      <div class="account-section" id="accountSection">
+        <div class="account-avatar" id="accountAvatar"></div>
+        <span class="account-name" id="accountName">未登录</span>
+        <button class="btn-account-menu" id="btnAccountMenu" title="账号管理">&#9660;</button>
+        <div class="account-dropdown" id="accountDropdown" style="display:none">
+          <button id="btnSwitchAccount">切换账号</button>
+          <button id="btnLogout">退出登录</button>
+        </div>
+      </div>
       <button class="btn-settings" id="btnSettings">API 设置</button>
     </div>
   </aside>
@@ -59,6 +69,34 @@
       <p class="input-hint">内容由AI生成，仅供参考</p>
     </footer>
   </main>
+
+  <!-- 登录弹窗 -->
+  <div class="modal-overlay" id="loginOverlay">
+    <div class="modal" id="loginModal">
+      <div class="login-tabs">
+        <button class="login-tab active" data-tab="login">登录</button>
+        <button class="login-tab" data-tab="register">注册</button>
+      </div>
+
+      <!-- 登录表单 -->
+      <form id="loginForm" class="login-form">
+        <label>用户名 <input type="text" id="loginUsername" placeholder="输入用户名" required /></label>
+        <label>密码 <input type="password" id="loginPassword" placeholder="输入密码" required /></label>
+        <button type="submit" class="btn-primary" style="width:100%">登录</button>
+        <p class="login-error" id="loginError"></p>
+      </form>
+
+      <!-- 注册表单 -->
+      <form id="registerForm" class="login-form" style="display:none">
+        <label>用户名 <input type="text" id="regUsername" placeholder="3-20位字母或数字" required minlength="3" maxlength="20" /></label>
+        <label>显示名称 <input type="text" id="regDisplayName" placeholder="可选，默认为用户名" /></label>
+        <label>密码 <input type="password" id="regPassword" placeholder="至少6位" required minlength="6" /></label>
+        <label>确认密码 <input type="password" id="regPassword2" placeholder="再次输入密码" required /></label>
+        <button type="submit" class="btn-primary" style="width:100%">注册</button>
+        <p class="login-error" id="registerError"></p>
+      </form>
+    </div>
+  </div>
 
   <!-- 设置弹窗 -->
   <div class="modal-overlay" id="modalOverlay">

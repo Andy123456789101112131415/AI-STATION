@@ -29,18 +29,234 @@ const btnAnalyze = $("#btnStats");
 const btnSaveSettings = $("#btnSaveSettings");
 const btnCloseModal = $("#btnCloseModal");
 
-/* ========== 状态 ========== */
-const STORAGE_KEY = "ai_platform_data";
+/* ========== 账号管理 ========== */
+const ACCOUNTS_KEY = "ai_platform_accounts";
+const SESSION_KEY = "ai_platform_session";
 
-function loadState() {
+function hashPassword(pwd) {
+  // 简单哈希（客户端本地存储，非安全用途）
+  let h = 0;
+  for (let i = 0; i < pwd.length; i++) {
+    h = ((h << 5) - h + pwd.charCodeAt(i)) | 0;
+  }
+  return "p_" + Math.abs(h).toString(36);
+}
+
+function loadAccounts() {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(ACCOUNTS_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch { return {}; }
+}
+
+function saveAccounts(accs) {
+  localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(accs));
+}
+
+function getSession() {
+  try {
+    const raw = localStorage.getItem(SESSION_KEY);
     return raw ? JSON.parse(raw) : null;
   } catch { return null; }
 }
 
-function saveState(state) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+function setSession(accountId) {
+  localStorage.setItem(SESSION_KEY, JSON.stringify({ accountId, loginTime: Date.now() }));
+}
+
+function clearSession() {
+  localStorage.removeItem(SESSION_KEY);
+}
+
+// 迁移旧数据：如果存在旧格式数据但没有账号，自动创建默认账号
+function migrateOldData() {
+  const oldData = localStorage.getItem("ai_platform_data");
+  const accounts = loadAccounts();
+  if (oldData && Object.keys(accounts).length === 0) {
+    const defaultId = "default_user";
+    accounts[defaultId] = {
+      id: defaultId,
+      username: "admin",
+      displayName: "管理员",
+      passwordHash: hashPassword("admin123"),
+      createdAt: Date.now(),
+    };
+    saveAccounts(accounts);
+    setSession(defaultId);
+    // 旧数据保留在原 key 下，后续 getAccountData 会读取
+  }
+}
+
+function getAccountData(accountId) {
+  const key = "ai_platform_data_" + accountId;
+  try {
+    const raw = localStorage.getItem(key);
+    if (raw) return JSON.parse(raw);
+  } catch {}
+  // 尝试迁移旧数据
+  const oldData = localStorage.getItem("ai_platform_data");
+  if (oldData && accountId === "default_user") {
+    try { return JSON.parse(oldData); } catch {}
+  }
+  return null;
+}
+
+function saveAccountData(accountId, data) {
+  localStorage.setItem("ai_platform_data_" + accountId, JSON.stringify(data));
+}
+
+// 账号 UI
+const loginOverlay = document.getElementById("loginOverlay");
+const loginForm = document.getElementById("loginForm");
+const registerForm = document.getElementById("registerForm");
+const loginUsername = document.getElementById("loginUsername");
+const loginPassword = document.getElementById("loginPassword");
+const loginError = document.getElementById("loginError");
+const regUsername = document.getElementById("regUsername");
+const regDisplayName = document.getElementById("regDisplayName");
+const regPassword = document.getElementById("regPassword");
+const regPassword2 = document.getElementById("regPassword2");
+const registerError = document.getElementById("registerError");
+const accountSection = document.getElementById("accountSection");
+const accountAvatar = document.getElementById("accountAvatar");
+const accountName = document.getElementById("accountName");
+const accountDropdown = document.getElementById("accountDropdown");
+const btnAccountMenu = document.getElementById("btnAccountMenu");
+const btnSwitchAccount = document.getElementById("btnSwitchAccount");
+const btnLogout = document.getElementById("btnLogout");
+
+// Tab 切换
+document.querySelectorAll(".login-tab").forEach((tab) => {
+  tab.addEventListener("click", () => {
+    document.querySelectorAll(".login-tab").forEach((t) => t.classList.remove("active"));
+    tab.classList.add("active");
+    const target = tab.dataset.tab;
+    loginForm.style.display = target === "login" ? "" : "none";
+    registerForm.style.display = target === "register" ? "" : "none";
+    loginError.textContent = "";
+    registerError.textContent = "";
+  });
+});
+
+// 登录
+loginForm.addEventListener("submit", (e) => {
+  e.preventDefault();
+  const username = loginUsername.value.trim();
+  const pwd = loginPassword.value;
+  const accounts = loadAccounts();
+  const found = Object.values(accounts).find(
+    (a) => a.username === username && a.passwordHash === hashPassword(pwd)
+  );
+  if (!found) {
+    loginError.textContent = "用户名或密码错误";
+    return;
+  }
+  setSession(found.id);
+  loginOverlay.classList.remove("show");
+  loginUsername.value = "";
+  loginPassword.value = "";
+  loginError.textContent = "";
+  initApp();
+});
+
+// 注册
+registerForm.addEventListener("submit", (e) => {
+  e.preventDefault();
+  const username = regUsername.value.trim();
+  const displayName = regDisplayName.value.trim() || username;
+  const pwd = regPassword.value;
+  const pwd2 = regPassword2.value;
+  if (!/^[a-zA-Z0-9_\u4e00-\u9fa5]{3,20}$/.test(username)) {
+    registerError.textContent = "用户名需3-20位字母、数字、中文或下划线";
+    return;
+  }
+  if (pwd.length < 6) {
+    registerError.textContent = "密码至少6位";
+    return;
+  }
+  if (pwd !== pwd2) {
+    registerError.textContent = "两次密码不一致";
+    return;
+  }
+  const accounts = loadAccounts();
+  if (Object.values(accounts).some((a) => a.username === username)) {
+    registerError.textContent = "用户名已存在";
+    return;
+  }
+  const id = "u_" + Date.now().toString(36);
+  accounts[id] = {
+    id, username, displayName,
+    passwordHash: hashPassword(pwd),
+    createdAt: Date.now(),
+  };
+  saveAccounts(accounts);
+  setSession(id);
+  loginOverlay.classList.remove("show");
+  regUsername.value = "";
+  regDisplayName.value = "";
+  regPassword.value = "";
+  regPassword2.value = "";
+  registerError.textContent = "";
+  initApp();
+});
+
+// 账号菜单
+btnAccountMenu.addEventListener("click", (e) => {
+  e.stopPropagation();
+  accountDropdown.style.display = accountDropdown.style.display === "none" ? "" : "none";
+});
+
+document.addEventListener("click", () => {
+  accountDropdown.style.display = "none";
+});
+
+btnSwitchAccount.addEventListener("click", () => {
+  clearSession();
+  accountDropdown.style.display = "none";
+  location.reload();
+});
+
+btnLogout.addEventListener("click", () => {
+  clearSession();
+  accountDropdown.style.display = "none";
+  location.reload();
+});
+
+function renderAccountUI() {
+  const session = getSession();
+  if (!session) {
+    accountAvatar.textContent = "?";
+    accountName.textContent = "未登录";
+    loginOverlay.classList.add("show");
+    return;
+  }
+  const accounts = loadAccounts();
+  const acc = accounts[session.accountId];
+  if (!acc) {
+    clearSession();
+    location.reload();
+    return;
+  }
+  accountAvatar.textContent = (acc.displayName || acc.username).charAt(0).toUpperCase();
+  accountName.textContent = acc.displayName || acc.username;
+  loginOverlay.classList.remove("show");
+}
+
+/* ========== 状态（账号隔离） ========== */
+function getStorageKey() {
+  const session = getSession();
+  return session ? "ai_platform_data_" + session.accountId : "ai_platform_data";
+}
+
+function loadState() {
+  try {
+    const raw = localStorage.getItem(getStorageKey());
+    return raw ? JSON.parse(raw) : null;
+  } catch { return null; }
+}
+
+function saveState(st) {
+  localStorage.setItem(getStorageKey(), JSON.stringify(st));
 }
 
 function defaultSettings() {
@@ -68,22 +284,7 @@ function defaultState() {
   };
 }
 
-let state = loadState() || defaultState();
-
-// 兼容旧数据：如果 state 里有旧的 settings 字段，迁移到 globalSettings
-if (state.settings && !state.globalSettings) {
-  state.globalSettings = state.settings;
-  delete state.settings;
-}
-// 兼容旧 chat：如果 chat 没有 settings，用 globalSettings 补上
-state.chats.forEach((chat) => {
-  if (!chat.settings) {
-    chat.settings = { ...(state.globalSettings || defaultSettings()) };
-  }
-});
-if (state.chats.some((c) => !c.settings)) {
-  saveState(state);
-}
+let state = null;
 
 /* ========== 获取当前活跃 Chat 的 settings ========== */
 function getChatSettings() {
@@ -751,21 +952,37 @@ function renderHeatmap(allMsgs) {
     weeks.push(week);
   }
 
+  let totalMsgs = 0;
   allMsgs.forEach((msg) => {
     if (!msg.timestamp) return;
     const key = new Date(msg.timestamp).toISOString().slice(0, 10);
     weeks.forEach((week) => {
       week.forEach((cell) => {
-        if (cell.key === key) cell.count++;
+        if (cell.key === key) { cell.count++; totalMsgs++; }
       });
     });
   });
 
-  const maxCount = Math.max(1, ...weeks.flat().map((c) => c.count));
   const levels = [0, 1, 3, 6, 10];
+  const months = ["1月","2月","3月","4月","5月","6月","7月","8月","9月","10月","11月","12月"];
 
-  const dayLabels = ["一", "三", "五", "日"];
-  heatmap.innerHTML = weeks[0]
+  // 构建月份标签行 - 用12个等宽单元格对齐
+  const monthCells = [];
+  let lastMonth = -1;
+  for (let wi = 0; wi < 12; wi++) {
+    const m = weeks[wi][6].date.getMonth();
+    if (m !== lastMonth) {
+      monthCells.push(`<span class="heatmap-month-label">${months[m]}</span>`);
+      lastMonth = m;
+    } else {
+      monthCells.push(`<span class="heatmap-month-label"></span>`);
+    }
+  }
+  const monthRow = `<div class="heatmap-row"><span class="heatmap-row-label"></span><div class="heatmap-week heatmap-month-week">${monthCells.join("")}</div></div>`;
+
+  const dayLabels = ["一", "二", "三", "四", "五", "六", "日"];
+
+  const gridRows = weeks[0]
     .map((_, dayIdx) => {
       const cells = weeks
         .map((week) => {
@@ -782,7 +999,10 @@ function renderHeatmap(allMsgs) {
     })
     .join("");
 
-  heatmap.innerHTML += `
+  heatmap.innerHTML = `
+    <div class="heatmap-total">近12周共 ${totalMsgs} 条消息</div>
+    ${monthRow}
+    ${gridRows}
     <div class="heatmap-legend">
       少
       ${[0, 1, 2, 3, 4].map((l) => `<span class="heatmap-cell l${l}"></span>`).join("")}
@@ -885,11 +1105,35 @@ document.addEventListener("keydown", (e) => {
 });
 
 /* ========== 启动 ========== */
-applySettingsToUI();
-renderChatList();
-renderMessages();
+function initApp() {
+  migrateOldData();
+  renderAccountUI();
 
-// 默认打开一个对话
-if (state.chats.length === 0) {
-  newChat();
+  // 检查登录状态
+  const session = getSession();
+  if (!session) {
+    loginOverlay.classList.add("show");
+    return; // 未登录，不加载数据
+  }
+
+  // 加载当前账号数据
+  state = loadState() || defaultState();
+
+  // 兼容旧 chat
+  state.chats.forEach((chat) => {
+    if (!chat.settings) {
+      chat.settings = { ...(state.globalSettings || defaultSettings()) };
+    }
+  });
+
+  applySettingsToUI();
+  renderChatList();
+  renderMessages();
+
+  if (state.chats.length === 0) {
+    newChat();
+  }
 }
+
+// 启动
+initApp();
