@@ -164,14 +164,13 @@ function showVipModal() {
 }
 
 async function startPay(tier, amount) {
-  const API_BASE = window.location.origin || "http://localhost:3456";
+  const API_BASE = "http://localhost:3456";
 
-  // 隐藏卡片，显示支付区
   document.querySelectorAll(".vip-cards").forEach((el) => el.style.display = "none");
   payArea.style.display = "";
   payAmount.textContent = amount + " 元";
-  payQrcode.innerHTML = "<p style='color:#999;font-size:13px'>正在生成支付二维码...</p>";
-  payStatus.textContent = "等待支付...";
+  payQrcode.innerHTML = "<p style='color:#999;font-size:13px'>正在连接支付服务...</p>";
+  payStatus.textContent = "";
 
   try {
     const resp = await fetch(API_BASE + "/api/create-order", {
@@ -182,18 +181,28 @@ async function startPay(tier, amount) {
     const data = await resp.json();
 
     if (!data.success) {
-      payQrcode.innerHTML = `<p style='color:red'>创建订单失败：${data.error}</p>`;
+      // PayJS 未配置，降级为模拟支付
+      payQrcode.innerHTML = `<p style='color:var(--text-secondary);font-size:13px'>${data.error || "支付服务暂不可用"}</p>`;
+      payStatus.innerHTML = '<button class="btn-primary" id="btnMockPay" style="margin-top:8px">模拟支付（测试用）</button>';
+      document.getElementById("btnMockPay").addEventListener("click", () => {
+        upgradeToVip(tier);
+        vipOverlay.classList.remove("show");
+        payArea.style.display = "none";
+        resetPayUI();
+        applySettingsToUI();
+        alert("VIP 已开通！（测试模式）");
+      });
       return;
     }
 
-    // 显示二维码
+    // 显示真实二维码
     if (data.qrcode) {
       payQrcode.innerHTML = `<img src="${data.qrcode}" style="width:180px;height:180px" alt="支付二维码" />`;
     } else if (data.code_url) {
       payQrcode.innerHTML = `<img src="https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(data.code_url)}" alt="支付二维码" />`;
     }
+    payStatus.textContent = "等待支付...";
 
-    // 轮询支付状态
     const outTradeNo = data.outTradeNo;
     payTimer = setInterval(async () => {
       try {
@@ -210,7 +219,7 @@ async function startPay(tier, amount) {
           setTimeout(() => {
             vipOverlay.classList.remove("show");
             payArea.style.display = "none";
-            document.querySelectorAll(".vip-cards").forEach((el) => el.style.display = "");
+            resetPayUI();
             applySettingsToUI();
             alert("VIP 已开通，欢迎使用全部功能！");
           }, 800);
@@ -218,17 +227,31 @@ async function startPay(tier, amount) {
       } catch {}
     }, 3000);
   } catch (err) {
-    payQrcode.innerHTML = `<p style='color:var(--text-secondary);font-size:13px;text-align:center;padding:20px'>
-      支付服务暂不可用<br><br>
-      <small>请确认：<br>1. 已运行 node server.js<br>2. 已在 server.js 中填写 PayJS 商户号和密钥<br>3. 通过 http://localhost:3456 访问</small>
+    // 服务器未启动，降级为模拟支付
+    payQrcode.innerHTML = `<p style='color:var(--text-secondary);font-size:13px'>
+      支付服务未启动<br><small>请运行 node server.js 或使用模拟支付</small>
     </p>`;
+    payStatus.innerHTML = '<button class="btn-primary" id="btnMockPay" style="margin-top:8px">模拟支付（测试用）</button>';
+    document.getElementById("btnMockPay").addEventListener("click", () => {
+      upgradeToVip(tier);
+      vipOverlay.classList.remove("show");
+      payArea.style.display = "none";
+      resetPayUI();
+      applySettingsToUI();
+      renderAccountUI();
+      alert("VIP 已开通！（测试模式）");
+    });
   }
+}
+
+function resetPayUI() {
+  document.querySelectorAll(".vip-cards").forEach((el) => el.style.display = "");
 }
 
 function cancelPay() {
   if (payTimer) clearInterval(payTimer);
   payArea.style.display = "none";
-  document.querySelectorAll(".vip-cards").forEach((el) => el.style.display = "");
+  resetPayUI();
 }
 
 document.querySelectorAll(".vip-buy-btn").forEach((btn) => {
