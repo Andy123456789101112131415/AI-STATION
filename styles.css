@@ -228,6 +228,85 @@ body {
   color: var(--danger);
   min-height: 16px;
 }
+
+/* VIP 升级 */
+.vip-cards {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin: 8px 0;
+}
+.vip-card {
+  border: 2px solid var(--border);
+  border-radius: 12px;
+  padding: 20px 16px;
+  text-align: center;
+  position: relative;
+  transition: .2s;
+}
+.vip-card:hover { border-color: var(--accent); }
+.vip-card-premium { border-color: #22a699; }
+.vip-card-badge {
+  position: absolute;
+  top: -10px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--accent);
+  color: #fff;
+  font-size: 11px;
+  padding: 2px 12px;
+  border-radius: 10px;
+  font-weight: 600;
+}
+.vip-card-premium .vip-card-badge { background: #22a699; }
+.vip-card-price {
+  font-size: 32px;
+  font-weight: 800;
+  color: var(--text-primary);
+  margin: 8px 0;
+}
+.vip-card-price span {
+  font-size: 14px;
+  font-weight: 400;
+  color: var(--text-secondary);
+}
+.vip-card-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 10px;
+}
+.vip-card-features {
+  list-style: none;
+  text-align: left;
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-bottom: 12px;
+}
+.vip-card-features li {
+  padding: 3px 0;
+}
+.vip-card-features li::before {
+  content: "✓ ";
+  color: #22a699;
+  font-weight: 700;
+}
+.vip-buy-btn {
+  width: 100%;
+  padding: 10px 0 !important;
+  font-size: 13px !important;
+}
+
+/* 免费用户提示 */
+.free-badge {
+  display: inline-block;
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 8px;
+  background: #f0f0f4;
+  color: #999;
+  margin-left: 6px;
+}
 .btn-settings {
   width: 100%;
   padding: 8px 0;

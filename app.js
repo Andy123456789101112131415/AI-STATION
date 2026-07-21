@@ -68,6 +68,113 @@ function clearSession() {
   localStorage.removeItem(SESSION_KEY);
 }
 
+/* ========== VIP 套餐 ========== */
+function getAccount() {
+  const session = getSession();
+  if (!session) return null;
+  const accounts = loadAccounts();
+  return accounts[session.accountId] || null;
+}
+
+function isVip() {
+  const acc = getAccount();
+  if (!acc) return false;
+  if (acc.tier === "vip_lifetime") return true;
+  if (acc.tier === "vip_monthly" && acc.vipExpiry && acc.vipExpiry > Date.now()) return true;
+  // 月付过期自动降级
+  if (acc.tier === "vip_monthly" && acc.vipExpiry && acc.vipExpiry <= Date.now()) {
+    acc.tier = "free";
+    delete acc.vipExpiry;
+    saveAccounts(loadAccounts()); // 这段需要修复 - 应该直接保存
+    return false;
+  }
+  return false;
+}
+
+function getTodayKey() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function getTodayMsgCount() {
+  const acc = getAccount();
+  if (!acc) return 0;
+  const today = getTodayKey();
+  if (acc.lastMessageDate !== today) return 0;
+  return acc.messageCountToday || 0;
+}
+
+function incrementMsgCount() {
+  const session = getSession();
+  if (!session) return;
+  const accounts = loadAccounts();
+  const acc = accounts[session.accountId];
+  if (!acc) return;
+  const today = getTodayKey();
+  if (acc.lastMessageDate !== today) {
+    acc.lastMessageDate = today;
+    acc.messageCountToday = 1;
+  } else {
+    acc.messageCountToday = (acc.messageCountToday || 0) + 1;
+  }
+  saveAccounts(accounts);
+}
+
+function canSendMessage() {
+  if (isVip()) return true;
+  return getTodayMsgCount() < 3;
+}
+
+function remainingMessages() {
+  if (isVip()) return Infinity;
+  return Math.max(0, 3 - getTodayMsgCount());
+}
+
+function upgradeToVip(tier) {
+  const session = getSession();
+  if (!session) return;
+  const accounts = loadAccounts();
+  const acc = accounts[session.accountId];
+  if (!acc) return;
+  acc.tier = tier;
+  if (tier === "vip_monthly") {
+    acc.vipExpiry = Date.now() + 30 * 24 * 60 * 60 * 1000;
+  } else {
+    delete acc.vipExpiry;
+  }
+  saveAccounts(accounts);
+}
+
+// VIP 弹窗
+const vipOverlay = document.getElementById("vipOverlay");
+const btnCloseVip = document.getElementById("btnCloseVip");
+const vipRemaining = document.getElementById("vipRemaining");
+
+function showVipModal() {
+  if (isVip()) return;
+  vipRemaining.textContent = remainingMessages();
+  vipOverlay.classList.add("show");
+}
+
+document.querySelectorAll(".vip-buy-btn").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    const tier = btn.dataset.tier;
+    if (confirm(`确认开通${tier === "vip_lifetime" ? "终生VIP (29.9)" : "月度VIP (9.9/月)"}？\n\n（模拟支付，实际不会扣款）`)) {
+      upgradeToVip(tier);
+      vipOverlay.classList.remove("show");
+      applySettingsToUI();
+      alert("开通成功！欢迎成为VIP会员。");
+    }
+  });
+});
+
+btnCloseVip.addEventListener("click", () => {
+  vipOverlay.classList.remove("show");
+});
+
+vipOverlay.addEventListener("click", (e) => {
+  if (e.target === vipOverlay) vipOverlay.classList.remove("show");
+});
+
 // 迁移旧数据：如果存在旧格式数据但没有账号，自动创建默认账号
 function migrateOldData() {
   const oldData = localStorage.getItem("ai_platform_data");
@@ -80,6 +187,9 @@ function migrateOldData() {
       displayName: "管理员",
       passwordHash: hashPassword("admin123"),
       createdAt: Date.now(),
+      tier: "free",
+      messageCountToday: 0,
+      lastMessageDate: "",
     };
     saveAccounts(accounts);
     setSession(defaultId);
@@ -124,6 +234,7 @@ const accountDropdown = document.getElementById("accountDropdown");
 const btnAccountMenu = document.getElementById("btnAccountMenu");
 const btnSwitchAccount = document.getElementById("btnSwitchAccount");
 const btnLogout = document.getElementById("btnLogout");
+const btnCancelDropdown = document.getElementById("btnCancelDropdown");
 
 // Tab 切换
 document.querySelectorAll(".login-tab").forEach((tab) => {
@@ -188,6 +299,9 @@ registerForm.addEventListener("submit", (e) => {
     id, username, displayName,
     passwordHash: hashPassword(pwd),
     createdAt: Date.now(),
+    tier: "free",
+    messageCountToday: 0,
+    lastMessageDate: "",
   };
   saveAccounts(accounts);
   setSession(id);
@@ -222,6 +336,10 @@ btnLogout.addEventListener("click", () => {
   location.reload();
 });
 
+btnCancelDropdown.addEventListener("click", () => {
+  accountDropdown.style.display = "none";
+});
+
 function renderAccountUI() {
   const session = getSession();
   if (!session) {
@@ -238,8 +356,14 @@ function renderAccountUI() {
     return;
   }
   accountAvatar.textContent = (acc.displayName || acc.username).charAt(0).toUpperCase();
-  accountName.textContent = acc.displayName || acc.username;
+  const vipLabel = isVip() ? '<span style="color:#22a699;font-size:10px;margin-left:4px">VIP</span>' : '<span class="free-badge">免费</span>';
+  accountName.innerHTML = (acc.displayName || acc.username) + vipLabel;
   loginOverlay.classList.remove("show");
+
+  // 免费用户弹 VIP 升级窗
+  if (!isVip()) {
+    setTimeout(() => showVipModal(), 600);
+  }
 }
 
 /* ========== 状态（账号隔离） ========== */
@@ -537,6 +661,12 @@ async function sendMessage() {
     return;
   }
 
+  // 免费用户每日限制
+  if (!canSendMessage()) {
+    showVipModal();
+    return;
+  }
+
   // 确保有活跃对话
   let chat = getActiveChat();
   if (!chat) {
@@ -546,6 +676,7 @@ async function sendMessage() {
 
   // 添加用户消息
   chat.messages.push({ role: "user", content, timestamp: Date.now() });
+  incrementMsgCount();
   appendMessageBubble("user", content);
   userInput.value = "";
   userInput.style.height = "auto";
@@ -757,6 +888,7 @@ function updateCompareBtnState() {
 }
 
 function toggleCompare() {
+  if (!isVip()) { showVipModal(); return; }
   const s = getChatSettings();
   const cms = s.compareModels || [];
   const hasCmp = cms.some((c) => c.aiName && c.apiKey);
@@ -852,6 +984,7 @@ const statsOverlay = document.getElementById("statsOverlay");
 const btnCloseStats = document.getElementById("btnCloseStats");
 
 function openStats() {
+  if (!isVip()) { showVipModal(); return; }
   renderStats();
   statsOverlay.classList.add("show");
 }

@@ -28,6 +28,7 @@
         <div class="account-dropdown" id="accountDropdown" style="display:none">
           <button id="btnSwitchAccount">切换账号</button>
           <button id="btnLogout">退出登录</button>
+          <button id="btnCancelDropdown" style="color:var(--text-secondary)">取消</button>
         </div>
       </div>
       <button class="btn-settings" id="btnSettings">API 设置</button>
@@ -95,6 +96,43 @@
         <button type="submit" class="btn-primary" style="width:100%">注册</button>
         <p class="login-error" id="registerError"></p>
       </form>
+    </div>
+  </div>
+
+  <!-- VIP 升级弹窗 -->
+  <div class="modal-overlay" id="vipOverlay">
+    <div class="modal" id="vipModal">
+      <h3 style="text-align:center">解锁全部功能</h3>
+      <p style="text-align:center;color:var(--text-secondary);font-size:13px">免费用户每日限3条消息，升级VIP无限使用</p>
+      <div class="vip-cards">
+        <div class="vip-card">
+          <div class="vip-card-badge">推荐</div>
+          <div class="vip-card-price">9.9<span>/月</span></div>
+          <div class="vip-card-title">月度VIP</div>
+          <ul class="vip-card-features">
+            <li>无限消息</li>
+            <li>多模型对比</li>
+            <li>使用统计</li>
+            <li>思考过程展示</li>
+          </ul>
+          <button class="btn-primary vip-buy-btn" data-tier="vip_monthly">立即开通 9.9/月</button>
+        </div>
+        <div class="vip-card vip-card-premium">
+          <div class="vip-card-badge">最值</div>
+          <div class="vip-card-price">29.9<span>/终生</span></div>
+          <div class="vip-card-title">终生VIP</div>
+          <ul class="vip-card-features">
+            <li>无限消息</li>
+            <li>多模型对比</li>
+            <li>使用统计</li>
+            <li>思考过程展示</li>
+            <li>一次付费永久使用</li>
+          </ul>
+          <button class="btn-primary vip-buy-btn" data-tier="vip_lifetime" style="background:#22a699">立即开通 29.9/终生</button>
+        </div>
+      </div>
+      <button class="btn-secondary" id="btnCloseVip" style="width:100%">暂不升级</button>
+      <p style="text-align:center;font-size:11px;color:#ccc;margin-top:4px">今日剩余 <span id="vipRemaining" style="color:var(--accent)">3</span> 条消息</p>
     </div>
   </div>
 
