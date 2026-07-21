@@ -17,7 +17,7 @@ const settingApiUrl = $("#settingApiUrl");
 const settingApiKey = $("#settingApiKey");
 const settingModel = $("#settingModel");
 const settingMultiModel = $("#settingMultiModel");
-const settingHistoryAnalysis = $("#settingHistoryAnalysis");
+const settingHistoryAnalysis = $("#settingStats");
 const cmp1Name = $("#cmp1Name"); const cmp1Url = $("#cmp1Url");
 const cmp1Key = $("#cmp1Key"); const cmp1Model = $("#cmp1Model");
 const cmp2Name = $("#cmp2Name"); const cmp2Url = $("#cmp2Url");
@@ -25,7 +25,7 @@ const cmp2Key = $("#cmp2Key"); const cmp2Model = $("#cmp2Model");
 const compareModelsSection = $("#compareModelsSection");
 const inputToolbar = $("#inputToolbar");
 const btnCompare = $("#btnCompare");
-const btnAnalyze = $("#btnAnalyze");
+const btnAnalyze = $("#btnStats");
 const btnSaveSettings = $("#btnSaveSettings");
 const btnCloseModal = $("#btnCloseModal");
 
@@ -50,7 +50,7 @@ function defaultSettings() {
     apiKey: "",
     model: "deepseek-chat",
     enableMultiModel: false,
-    enableHistoryAnalysis: false,
+    enableStats: false,
     compareModels: [
       { aiName: "", apiUrl: "", apiKey: "", model: "" },
       { aiName: "", apiUrl: "", apiKey: "", model: "" },
@@ -104,10 +104,10 @@ function applySettingsToUI() {
   settingApiKey.value = s.apiKey || "";
   settingModel.value = s.model || "";
   // 工具栏可见性
-  const anyOn = s.enableMultiModel || s.enableHistoryAnalysis;
+  const anyOn = s.enableMultiModel || s.enableStats;
   inputToolbar.style.display = anyOn ? "flex" : "none";
   btnCompare.style.display = s.enableMultiModel ? "" : "none";
-  btnAnalyze.style.display = s.enableHistoryAnalysis ? "" : "none";
+  btnAnalyze.style.display = s.enableStats ? "" : "none";
   updateCompareBtnState();
 }
 
@@ -344,7 +344,7 @@ async function sendMessage() {
   }
 
   // 添加用户消息
-  chat.messages.push({ role: "user", content });
+  chat.messages.push({ role: "user", content, timestamp: Date.now() });
   appendMessageBubble("user", content);
   userInput.value = "";
   userInput.style.height = "auto";
@@ -360,7 +360,7 @@ async function sendMessage() {
     setInputEnabled(false);
     const mainResult = await sendCompareMessages(content);
     if (mainResult) {
-      chat.messages.push({ role: "assistant", content: mainResult.content, reasoning: mainResult.reasoning });
+      chat.messages.push({ role: "assistant", content: mainResult.content, reasoning: mainResult.reasoning, timestamp: Date.now() });
       saveState(state);
     }
     setInputEnabled(true);
@@ -472,7 +472,7 @@ async function sendMessage() {
       aiBody.innerHTML = "(AI 未返回内容)";
     }
 
-    const msg = { role: "assistant", content: fullContent };
+    const msg = { role: "assistant", content: fullContent, timestamp: Date.now() };
     if (fullReasoning) msg.reasoning = fullReasoning;
     chat.messages.push(msg);
     saveState(state);
@@ -480,7 +480,7 @@ async function sendMessage() {
     aiBody.classList.remove("streaming-cursor");
     if (thinking) thinking.section.remove();
     aiBody.innerHTML = renderMarkdown(`错误：${err.message}`);
-    chat.messages.push({ role: "assistant", content: `错误：${err.message}` });
+    chat.messages.push({ role: "assistant", content: `错误：${err.message}`, timestamp: Date.now() });
     saveState(state);
     console.error(err);
   }
@@ -646,65 +646,148 @@ async function sendCompareMessages(content) {
   return results[0] || null;
 }
 
-/* ========== 历史记录分析 ========== */
-async function analyzeHistory() {
-  const chat = getActiveChat();
-  if (!chat || chat.messages.length < 2) {
-    alert("当前对话消息不足，无法分析。");
-    return;
+/* ========== 使用统计 ========== */
+const statsOverlay = document.getElementById("statsOverlay");
+const btnCloseStats = document.getElementById("btnCloseStats");
+
+function openStats() {
+  renderStats();
+  statsOverlay.classList.add("show");
+}
+
+btnCloseStats.addEventListener("click", () => {
+  statsOverlay.classList.remove("show");
+});
+
+statsOverlay.addEventListener("click", (e) => {
+  if (e.target === statsOverlay) statsOverlay.classList.remove("show");
+});
+
+function renderStats() {
+  // 收集所有消息
+  const allMsgs = [];
+  state.chats.forEach((chat) => {
+    chat.messages.forEach((msg) => {
+      allMsgs.push({
+        role: msg.role,
+        model: (chat.settings && chat.settings.aiName) || "未知",
+        timestamp: msg.timestamp || null,
+      });
+    });
+  });
+
+  const totalMessages = allMsgs.length;
+  const totalChats = state.chats.length;
+  const userMsgs = allMsgs.filter((m) => m.role === "user").length;
+  const aiMsgs = allMsgs.filter((m) => m.role === "assistant").length;
+
+  // 概览卡片
+  document.getElementById("statsCards").innerHTML = `
+    <div class="stat-card"><div class="stat-value">${totalChats}</div><div class="stat-label">对话总数</div></div>
+    <div class="stat-card"><div class="stat-value">${totalMessages}</div><div class="stat-label">消息总数</div></div>
+    <div class="stat-card"><div class="stat-value">${userMsgs}</div><div class="stat-label">用户消息</div></div>
+    <div class="stat-card"><div class="stat-value">${aiMsgs}</div><div class="stat-label">AI 回复</div></div>
+  `;
+
+  // 模型使用占比
+  const modelCount = {};
+  allMsgs.filter((m) => m.role === "assistant").forEach((m) => {
+    modelCount[m.model] = (modelCount[m.model] || 0) + 1;
+  });
+
+  const colors = ["#4f6ef7", "#e0556a", "#22a699", "#f2a649", "#8b5cf6", "#06b6d4"];
+  const barChart = document.getElementById("statsBarChart");
+  if (Object.keys(modelCount).length === 0) {
+    barChart.innerHTML = '<span style="color:#999;font-size:13px">暂无数据</span>';
+  } else {
+    const maxCount = Math.max(...Object.values(modelCount));
+    barChart.innerHTML = Object.entries(modelCount)
+      .sort((a, b) => b[1] - a[1])
+      .map(([name, count], i) => {
+        const h = Math.max((count / maxCount) * 140, 8);
+        return `<div class="bar-item">
+          <div class="bar-count">${count}</div>
+          <div class="bar-fill" style="height:${h}px;background:${colors[i % colors.length]}"></div>
+          <div class="bar-label">${escapeHtml(name)}</div>
+        </div>`;
+      })
+      .join("");
   }
 
-  const settings = getChatSettings();
-  if (!settings.apiKey) { alert("请先配置 API 密钥。"); return; }
+  // 模型详情表
+  const tbody = document.querySelector("#statsTable tbody");
+  tbody.innerHTML = Object.entries(modelCount)
+    .sort((a, b) => b[1] - a[1])
+    .map(([name, count], i) => {
+      const chatsUsingModel = state.chats.filter((c) =>
+        c.messages.some((m) => m.role === "assistant")
+      ).length || 0;
+      const pct = aiMsgs > 0 ? ((count / aiMsgs) * 100).toFixed(1) : "0";
+      return `<tr>
+        <td><span class="model-dot-sm" style="background:${colors[i % colors.length]}"></span>${escapeHtml(name)}</td>
+        <td>${count}</td>
+        <td>${chatsUsingModel}</td>
+        <td>${pct}%</td>
+      </tr>`;
+    })
+    .join("") || '<tr><td colspan="4" style="color:#999">暂无数据</td></tr>';
 
-  setInputEnabled(false);
-  btnAnalyze.textContent = "分析中...";
+  // 活跃度热力图（近12周）
+  renderHeatmap(allMsgs);
+}
 
-  // 构建对话摘要
-  const conversationText = chat.messages
-    .map((m) => `${m.role === "user" ? "用户" : "AI"}：${m.content}`)
-    .join("\n\n");
-
-  const sysMsg = {
-    role: "system",
-    content: `你是一个对话分析专家。请分析以下对话历史，给出简洁专业的分析报告。格式要求：
-1. **对话主题**：一句话概括
-2. **核心要点**：3-5个关键点
-3. **用户意图**：用户主要想解决什么问题
-4. **完成情况**：问题是否得到解决
-5. **建议**：后续可深入的方向`,
-  };
-
-  let result = "";
-  // 创建分析卡片
-  const card = document.createElement("div");
-  card.className = "analysis-card";
-  card.innerHTML = `
-    <div class="analysis-card-header">对话分析报告</div>
-    <div class="analysis-card-body"><em>正在分析...</em></div>`;
-  messages.appendChild(card);
-  scrollToBottom();
-
-  const body = card.querySelector(".analysis-card-body");
-
-  try {
-    await streamApiCall(
-      settings,
-      [sysMsg, { role: "user", content: `请分析以下对话：\n\n${conversationText}` }],
-      null,
-      (delta) => {
-        result += delta;
-        body.innerHTML = renderMarkdown(result);
-        scrollToBottom();
-      }
-    );
-    if (!result) body.innerHTML = "分析未返回结果。";
-  } catch (err) {
-    body.innerHTML = `分析失败：${escapeHtml(err.message)}`;
+function renderHeatmap(allMsgs) {
+  const heatmap = document.getElementById("statsHeatmap");
+  const now = new Date();
+  const weeks = [];
+  for (let w = 11; w >= 0; w--) {
+    const week = [];
+    for (let d = 6; d >= 0; d--) {
+      const date = new Date(now);
+      date.setDate(date.getDate() - (w * 7 + d));
+      const key = date.toISOString().slice(0, 10);
+      week.push({ key, date: new Date(date), count: 0 });
+    }
+    weeks.push(week);
   }
 
-  btnAnalyze.textContent = "历史分析";
-  setInputEnabled(true);
+  allMsgs.forEach((msg) => {
+    if (!msg.timestamp) return;
+    const key = new Date(msg.timestamp).toISOString().slice(0, 10);
+    weeks.forEach((week) => {
+      week.forEach((cell) => {
+        if (cell.key === key) cell.count++;
+      });
+    });
+  });
+
+  const maxCount = Math.max(1, ...weeks.flat().map((c) => c.count));
+  const levels = [0, 1, 3, 6, 10];
+
+  const dayLabels = ["一", "三", "五", "日"];
+  heatmap.innerHTML = weeks[0]
+    .map((_, dayIdx) => {
+      const cells = weeks
+        .map((week) => {
+          const cell = week[6 - dayIdx];
+          let lvl = 0;
+          for (let l = levels.length - 1; l >= 0; l--) {
+            if (cell.count >= levels[l]) { lvl = l; break; }
+          }
+          return `<div class="heatmap-cell l${lvl}" title="${cell.key}: ${cell.count} 条消息"></div>`;
+        })
+        .join("");
+      const label = dayLabels[dayIdx] || "";
+      return `<div class="heatmap-row"><span class="heatmap-row-label">${label}</span><div class="heatmap-week">${cells}</div></div>`;
+    })
+    .join("");
+
+  heatmap.innerHTML += `
+    <div class="heatmap-legend">
+      少
+      ${[0, 1, 2, 3, 4].map((l) => `<span class="heatmap-cell l${l}"></span>`).join("")}
+      多
+    </div>`;
 }
 
 function escapeHtml(str) {
@@ -723,7 +806,7 @@ function openSettings() {
   settingApiKey.value = s.apiKey || "";
   settingModel.value = s.model || "";
   settingMultiModel.checked = !!s.enableMultiModel;
-  settingHistoryAnalysis.checked = !!s.enableHistoryAnalysis;
+  settingHistoryAnalysis.checked = !!s.enableStats;
   // 对比模型
   const cm = s.compareModels || [{}, {}];
   cmp1Name.value = cm[0]?.aiName || ""; cmp1Url.value = cm[0]?.apiUrl || "";
@@ -750,7 +833,7 @@ function saveSettings() {
   chat.settings.apiKey = settingApiKey.value.trim();
   chat.settings.model = settingModel.value.trim() || "deepseek-chat";
   chat.settings.enableMultiModel = settingMultiModel.checked;
-  chat.settings.enableHistoryAnalysis = settingHistoryAnalysis.checked;
+  chat.settings.enableStats = settingHistoryAnalysis.checked;
   chat.settings.compareModels = [
     { aiName: cmp1Name.value.trim(), apiUrl: cmp1Url.value.trim(), apiKey: cmp1Key.value.trim(), model: cmp1Model.value.trim() },
     { aiName: cmp2Name.value.trim(), apiUrl: cmp2Url.value.trim(), apiKey: cmp2Key.value.trim(), model: cmp2Model.value.trim() },
@@ -774,7 +857,7 @@ btnToggleSidebar.addEventListener("click", toggleSidebar);
 btnSaveSettings.addEventListener("click", saveSettings);
 btnCloseModal.addEventListener("click", closeSettings);
 btnCompare.addEventListener("click", toggleCompare);
-btnAnalyze.addEventListener("click", analyzeHistory);
+btnAnalyze.addEventListener("click", openStats);
 modalOverlay.addEventListener("click", (e) => {
   if (e.target === modalOverlay) closeSettings();
 });

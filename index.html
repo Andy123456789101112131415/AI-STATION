@@ -45,7 +45,7 @@
       <!-- 工具栏 -->
       <div class="input-toolbar" id="inputToolbar" style="display:none">
         <button class="toolbar-btn" id="btnCompare" title="多模型对比">多模型对比</button>
-        <button class="toolbar-btn" id="btnAnalyze" title="分析对话历史">历史分析</button>
+        <button class="toolbar-btn" id="btnStats" title="使用统计">使用统计</button>
       </div>
 
       <div class="input-wrapper">
@@ -83,9 +83,9 @@
           <small>同时向多个模型发送，对比回复结果</small>
         </label>
         <label class="checkbox-label">
-          <input type="checkbox" id="settingHistoryAnalysis" />
-          <span>历史记录分析</span>
-          <small>一键分析当前对话的主题、要点和趋势</small>
+          <input type="checkbox" id="settingStats" />
+          <span>使用统计</span>
+          <small>查看 AI 模型使用率、活跃度等数据分析</small>
         </label>
       </div>
 
@@ -109,6 +109,42 @@
       <div class="modal-actions">
         <button class="btn-primary" id="btnSaveSettings">保存</button>
         <button class="btn-secondary" id="btnCloseModal">取消</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 使用统计弹窗 -->
+  <div class="modal-overlay" id="statsOverlay">
+    <div class="modal modal-wide" id="statsModal">
+      <div class="stats-header-row">
+        <h3>使用统计</h3>
+        <button class="btn-secondary" id="btnCloseStats">关闭</button>
+      </div>
+
+      <!-- 概览卡片 -->
+      <div class="stats-cards" id="statsCards"></div>
+
+      <!-- 模型使用率 -->
+      <div class="modal-section">
+        <h4>模型使用占比</h4>
+        <div class="stats-bar-chart" id="statsBarChart"></div>
+      </div>
+
+      <!-- 活跃度热力图 -->
+      <div class="modal-section">
+        <h4>对话活跃度（近 12 周）</h4>
+        <div class="stats-heatmap" id="statsHeatmap"></div>
+      </div>
+
+      <!-- 模型详情表 -->
+      <div class="modal-section">
+        <h4>模型详情</h4>
+        <div class="stats-table-wrap">
+          <table class="stats-table" id="statsTable">
+            <thead><tr><th>模型</th><th>消息数</th><th>对话数</th><th>占比</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
       </div>
     </div>
   </div>
