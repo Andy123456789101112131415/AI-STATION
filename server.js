@@ -90,8 +90,18 @@ const server = http.createServer((req, res) => {
 
   const url = new URL(req.url, "http://localhost");
 
+  // 检查 PayJS 是否已配置
+  function isPayConfigured() {
+    return PAYJS_MCHID !== "你的商户号" && PAYJS_KEY !== "你的密钥" && PAYJS_MCHID && PAYJS_KEY;
+  }
+
   // API: 创建支付订单
   if (url.pathname === "/api/create-order" && req.method === "POST") {
+    if (!isPayConfigured()) {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ success: false, error: "管理员尚未配置PayJS，请在 server.js 中填写商户号和密钥" }));
+      return;
+    }
     let body = "";
     req.on("data", (c) => (body += c));
     req.on("end", async () => {
@@ -124,6 +134,11 @@ const server = http.createServer((req, res) => {
 
   // API: 查询支付状态
   if (url.pathname === "/api/check-order" && req.method === "POST") {
+    if (!isPayConfigured()) {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ paid: false }));
+      return;
+    }
     let body = "";
     req.on("data", (c) => (body += c));
     req.on("end", async () => {
@@ -180,5 +195,8 @@ const server = http.createServer((req, res) => {
 
 server.listen(PORT, () => {
   console.log(`服务已启动: http://localhost:${PORT}`);
-  console.log(`请先在 payjs.cn 注册并填写 PAYJS_MCHID 和 PAYJS_KEY`);
+  if (PAYJS_MCHID === "你的商户号") {
+    console.log("⚠ 请先在 server.js 中填写 PAYJS_MCHID 和 PAYJS_KEY");
+    console.log("  未配置时点击支付会显示友好提示，不会报错");
+  }
 });

@@ -218,7 +218,10 @@ async function startPay(tier, amount) {
       } catch {}
     }, 3000);
   } catch (err) {
-    payQrcode.innerHTML = `<p style='color:red'>请求失败：${err.message}</p>`;
+    payQrcode.innerHTML = `<p style='color:var(--text-secondary);font-size:13px;text-align:center;padding:20px'>
+      支付服务暂不可用<br><br>
+      <small>请确认：<br>1. 已运行 node server.js<br>2. 已在 server.js 中填写 PayJS 商户号和密钥<br>3. 通过 http://localhost:3456 访问</small>
+    </p>`;
   }
 }
 
