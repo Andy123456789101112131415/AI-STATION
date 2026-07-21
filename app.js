@@ -310,7 +310,6 @@ loginForm.addEventListener("submit", (e) => {
   loginUsername.value = "";
   loginPassword.value = "";
   loginError.textContent = "";
-  resetCaptcha("login");
   initApp();
 });
 
@@ -359,7 +358,6 @@ registerForm.addEventListener("submit", (e) => {
   regPassword.value = "";
   regPassword2.value = "";
   registerError.textContent = "";
-  resetCaptcha("reg");
   initApp();
 });
 
@@ -502,7 +500,7 @@ function createChat(fromSettings) {
 }
 
 function getActiveChat() {
-  if (!state.activeChatId) return null;
+  if (!state || !state.activeChatId) return null;
   return state.chats.find((c) => c.id === state.activeChatId) || null;
 }
 
