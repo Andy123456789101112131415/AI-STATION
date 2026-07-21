@@ -83,12 +83,11 @@
       <form id="loginForm" class="login-form">
         <label>用户名 <input type="text" id="loginUsername" placeholder="输入用户名" required /></label>
         <label>密码 <input type="password" id="loginPassword" placeholder="输入密码" required /></label>
-        <!-- 滑块验证 -->
-        <div class="captcha-box" id="loginCaptcha">
-          <div class="captcha-track">
-            <div class="captcha-fill" id="loginCaptchaFill"></div>
-            <div class="captcha-thumb" id="loginCaptchaThumb">→</div>
-            <span class="captcha-text" id="loginCaptchaText">请按住滑块拖动到最右侧</span>
+        <div class="cf-turnstile" data-sitekey="1x00000000000000000000AA" data-callback="onLoginCaptcha"></div>
+        <div class="captcha-fallback" id="loginFallback" style="display:none">
+          <div class="math-captcha">
+            <span id="loginMathQ"></span>
+            <input type="number" id="loginMathA" placeholder="输入答案" style="width:80px;text-align:center" />
           </div>
         </div>
         <button type="submit" class="btn-primary" id="loginSubmitBtn" style="width:100%" disabled>请先完成验证</button>
@@ -101,12 +100,11 @@
         <label>显示名称 <input type="text" id="regDisplayName" placeholder="可选，默认为用户名" /></label>
         <label>密码 <input type="password" id="regPassword" placeholder="至少6位" required minlength="6" /></label>
         <label>确认密码 <input type="password" id="regPassword2" placeholder="再次输入密码" required /></label>
-        <!-- 滑块验证 -->
-        <div class="captcha-box" id="regCaptcha">
-          <div class="captcha-track">
-            <div class="captcha-fill" id="regCaptchaFill"></div>
-            <div class="captcha-thumb" id="regCaptchaThumb">→</div>
-            <span class="captcha-text" id="regCaptchaText">请按住滑块拖动到最右侧</span>
+        <div class="cf-turnstile" data-sitekey="1x00000000000000000000AA" data-callback="onRegCaptcha"></div>
+        <div class="captcha-fallback" id="regFallback" style="display:none">
+          <div class="math-captcha">
+            <span id="regMathQ"></span>
+            <input type="number" id="regMathA" placeholder="输入答案" style="width:80px;text-align:center" />
           </div>
         </div>
         <button type="submit" class="btn-primary" id="regSubmitBtn" style="width:100%" disabled>请先完成验证</button>
@@ -241,6 +239,7 @@
     </div>
   </div>
 
+  <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
   <script src="app.js"></script>
 </body>
 </html>
