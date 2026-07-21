@@ -148,31 +148,103 @@ function upgradeToVip(tier) {
 const vipOverlay = document.getElementById("vipOverlay");
 const btnCloseVip = document.getElementById("btnCloseVip");
 const vipRemaining = document.getElementById("vipRemaining");
+const payArea = document.getElementById("payArea");
+const payAmount = document.getElementById("payAmount");
+const payQrcode = document.getElementById("payQrcode");
+const payStatus = document.getElementById("payStatus");
+const btnCancelPay = document.getElementById("btnCancelPay");
+let payTimer = null;
 
 function showVipModal() {
   if (isVip()) return;
   vipRemaining.textContent = remainingMessages();
+  payArea.style.display = "none";
+  document.querySelectorAll(".vip-cards").forEach((el) => el.style.display = "");
   vipOverlay.classList.add("show");
+}
+
+async function startPay(tier, amount) {
+  const API_BASE = window.location.origin || "http://localhost:3456";
+
+  // 隐藏卡片，显示支付区
+  document.querySelectorAll(".vip-cards").forEach((el) => el.style.display = "none");
+  payArea.style.display = "";
+  payAmount.textContent = amount + " 元";
+  payQrcode.innerHTML = "<p style='color:#999;font-size:13px'>正在生成支付二维码...</p>";
+  payStatus.textContent = "等待支付...";
+
+  try {
+    const resp = await fetch(API_BASE + "/api/create-order", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ amount, type: tier === "vip_lifetime" ? "lifetime" : "monthly" }),
+    });
+    const data = await resp.json();
+
+    if (!data.success) {
+      payQrcode.innerHTML = `<p style='color:red'>创建订单失败：${data.error}</p>`;
+      return;
+    }
+
+    // 显示二维码
+    if (data.qrcode) {
+      payQrcode.innerHTML = `<img src="${data.qrcode}" style="width:180px;height:180px" alt="支付二维码" />`;
+    } else if (data.code_url) {
+      payQrcode.innerHTML = `<img src="https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(data.code_url)}" alt="支付二维码" />`;
+    }
+
+    // 轮询支付状态
+    const outTradeNo = data.outTradeNo;
+    payTimer = setInterval(async () => {
+      try {
+        const checkResp = await fetch(API_BASE + "/api/check-order", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ outTradeNo }),
+        });
+        const checkData = await checkResp.json();
+        if (checkData.paid) {
+          clearInterval(payTimer);
+          payStatus.innerHTML = '<span style="color:#22a699;font-weight:600">支付成功！正在开通...</span>';
+          upgradeToVip(tier);
+          setTimeout(() => {
+            vipOverlay.classList.remove("show");
+            payArea.style.display = "none";
+            document.querySelectorAll(".vip-cards").forEach((el) => el.style.display = "");
+            applySettingsToUI();
+            alert("VIP 已开通，欢迎使用全部功能！");
+          }, 800);
+        }
+      } catch {}
+    }, 3000);
+  } catch (err) {
+    payQrcode.innerHTML = `<p style='color:red'>请求失败：${err.message}</p>`;
+  }
+}
+
+function cancelPay() {
+  if (payTimer) clearInterval(payTimer);
+  payArea.style.display = "none";
+  document.querySelectorAll(".vip-cards").forEach((el) => el.style.display = "");
 }
 
 document.querySelectorAll(".vip-buy-btn").forEach((btn) => {
   btn.addEventListener("click", () => {
     const tier = btn.dataset.tier;
-    if (confirm(`确认开通${tier === "vip_lifetime" ? "终生VIP (29.9)" : "月度VIP (9.9/月)"}？\n\n（模拟支付，实际不会扣款）`)) {
-      upgradeToVip(tier);
-      vipOverlay.classList.remove("show");
-      applySettingsToUI();
-      alert("开通成功！欢迎成为VIP会员。");
-    }
+    const amount = parseFloat(btn.dataset.amount);
+    startPay(tier, amount);
   });
 });
 
+btnCancelPay.addEventListener("click", cancelPay);
+
 btnCloseVip.addEventListener("click", () => {
+  cancelPay();
   vipOverlay.classList.remove("show");
 });
 
 vipOverlay.addEventListener("click", (e) => {
-  if (e.target === vipOverlay) vipOverlay.classList.remove("show");
+  if (e.target === vipOverlay) { cancelPay(); vipOverlay.classList.remove("show"); }
 });
 
 // 迁移旧数据：如果存在旧格式数据但没有账号，自动创建默认账号

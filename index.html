@@ -129,7 +129,7 @@
             <li>使用统计</li>
             <li>思考过程展示</li>
           </ul>
-          <button class="btn-primary vip-buy-btn" data-tier="vip_monthly">立即开通 9.9/月</button>
+          <button class="btn-primary vip-buy-btn" data-tier="vip_monthly" data-amount="9.9">微信/支付宝 支付</button>
         </div>
         <div class="vip-card vip-card-premium">
           <div class="vip-card-badge">最值</div>
@@ -142,7 +142,16 @@
             <li>思考过程展示</li>
             <li>一次付费永久使用</li>
           </ul>
-          <button class="btn-primary vip-buy-btn" data-tier="vip_lifetime" style="background:#22a699">立即开通 29.9/终生</button>
+          <button class="btn-primary vip-buy-btn" data-tier="vip_lifetime" data-amount="29.9" style="background:#22a699">微信/支付宝 支付</button>
+        </div>
+      </div>
+      <!-- 支付二维码区 -->
+      <div class="pay-area" id="payArea" style="display:none">
+        <div style="text-align:center;padding:10px">
+          <p style="font-size:13px;margin-bottom:8px">微信/支付宝扫码支付 <strong id="payAmount"></strong></p>
+          <div id="payQrcode" style="display:flex;justify-content:center"></div>
+          <p style="font-size:12px;color:#999;margin-top:8px" id="payStatus">等待支付...</p>
+          <button class="btn-secondary" id="btnCancelPay" style="margin-top:8px">取消支付</button>
         </div>
       </div>
       <button class="btn-secondary" id="btnCloseVip" style="width:100%">暂不升级</button>

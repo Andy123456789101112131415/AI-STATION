@@ -1,0 +1,9 @@
+{
+  "name": "ai-platform-server",
+  "version": "1.0.0",
+  "description": "AI平台支付后端",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  }
+}

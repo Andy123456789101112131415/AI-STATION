@@ -316,6 +316,10 @@ body {
   padding: 10px 0 !important;
   font-size: 13px !important;
 }
+.pay-area {
+  border-top: 1px solid var(--border);
+  padding-top: 10px;
+}
 
 /* 免费用户提示 */
 .free-badge {
