@@ -83,7 +83,15 @@
       <form id="loginForm" class="login-form">
         <label>用户名 <input type="text" id="loginUsername" placeholder="输入用户名" required /></label>
         <label>密码 <input type="password" id="loginPassword" placeholder="输入密码" required /></label>
-        <button type="submit" class="btn-primary" style="width:100%">登录</button>
+        <!-- 滑块验证 -->
+        <div class="captcha-box" id="loginCaptcha">
+          <div class="captcha-track">
+            <div class="captcha-fill" id="loginCaptchaFill"></div>
+            <div class="captcha-thumb" id="loginCaptchaThumb">→</div>
+            <span class="captcha-text" id="loginCaptchaText">请按住滑块拖动到最右侧</span>
+          </div>
+        </div>
+        <button type="submit" class="btn-primary" id="loginSubmitBtn" style="width:100%" disabled>请先完成验证</button>
         <p class="login-error" id="loginError"></p>
       </form>
 
@@ -93,7 +101,15 @@
         <label>显示名称 <input type="text" id="regDisplayName" placeholder="可选，默认为用户名" /></label>
         <label>密码 <input type="password" id="regPassword" placeholder="至少6位" required minlength="6" /></label>
         <label>确认密码 <input type="password" id="regPassword2" placeholder="再次输入密码" required /></label>
-        <button type="submit" class="btn-primary" style="width:100%">注册</button>
+        <!-- 滑块验证 -->
+        <div class="captcha-box" id="regCaptcha">
+          <div class="captcha-track">
+            <div class="captcha-fill" id="regCaptchaFill"></div>
+            <div class="captcha-thumb" id="regCaptchaThumb">→</div>
+            <span class="captcha-text" id="regCaptchaText">请按住滑块拖动到最右侧</span>
+          </div>
+        </div>
+        <button type="submit" class="btn-primary" id="regSubmitBtn" style="width:100%" disabled>请先完成验证</button>
         <p class="login-error" id="registerError"></p>
       </form>
     </div>

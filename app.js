@@ -236,7 +236,7 @@ const btnSwitchAccount = document.getElementById("btnSwitchAccount");
 const btnLogout = document.getElementById("btnLogout");
 const btnCancelDropdown = document.getElementById("btnCancelDropdown");
 
-// Tab 切换
+// Tab 切换 + 重置验证
 document.querySelectorAll(".login-tab").forEach((tab) => {
   tab.addEventListener("click", () => {
     document.querySelectorAll(".login-tab").forEach((t) => t.classList.remove("active"));
@@ -246,8 +246,111 @@ document.querySelectorAll(".login-tab").forEach((tab) => {
     registerForm.style.display = target === "register" ? "" : "none";
     loginError.textContent = "";
     registerError.textContent = "";
+    resetCaptcha("login");
+    resetCaptcha("reg");
   });
 });
+
+/* ========== 滑块验证 ========== */
+function initCaptcha(prefix, submitBtn) {
+  const track = document.getElementById(prefix + "Captcha").querySelector(".captcha-track");
+  const thumb = document.getElementById(prefix + "CaptchaThumb");
+  const fill = document.getElementById(prefix + "CaptchaFill");
+  const text = document.getElementById(prefix + "CaptchaText");
+  let verified = false;
+  let dragging = false;
+  let startX = 0;
+  let startLeft = 0;
+
+  function getMaxLeft() {
+    return track.clientWidth - thumb.clientWidth;
+  }
+
+  function onStart(e) {
+    if (verified) return;
+    dragging = true;
+    const touch = e.touches ? e.touches[0] : e;
+    startX = touch.clientX;
+    startLeft = thumb.offsetLeft;
+    thumb.style.transition = "none";
+    fill.style.transition = "none";
+    e.preventDefault();
+  }
+
+  function onMove(e) {
+    if (!dragging || verified) return;
+    const touch = e.touches ? e.touches[0] : e;
+    const dx = touch.clientX - startX;
+    let newLeft = Math.max(0, Math.min(startLeft + dx, getMaxLeft()));
+    thumb.style.left = newLeft + "px";
+    fill.style.width = (newLeft + thumb.clientWidth / 2) + "px";
+  }
+
+  function onEnd() {
+    if (!dragging || verified) return;
+    dragging = false;
+    thumb.style.transition = "left .2s ease";
+    fill.style.transition = "width .2s ease";
+
+    const threshold = getMaxLeft() * 0.9;
+    if (thumb.offsetLeft >= threshold) {
+      // 验证通过
+      verified = true;
+      thumb.style.left = getMaxLeft() + "px";
+      fill.classList.add("done");
+      thumb.classList.add("done");
+      thumb.innerHTML = "&#10003;";
+      text.textContent = "验证通过";
+      text.style.color = "#22a699";
+      submitBtn.disabled = false;
+      submitBtn.textContent = submitBtn.dataset.originalText || "登录";
+    } else {
+      // 回弹
+      thumb.style.left = "0px";
+      fill.style.width = "0px";
+    }
+  }
+
+  thumb.addEventListener("mousedown", onStart);
+  thumb.addEventListener("touchstart", onStart, { passive: false });
+  document.addEventListener("mousemove", onMove);
+  document.addEventListener("touchmove", onMove, { passive: false });
+  document.addEventListener("mouseup", onEnd);
+  document.addEventListener("touchend", onEnd);
+
+  return {
+    reset() {
+      verified = false;
+      thumb.style.left = "0px";
+      fill.style.width = "0px";
+      fill.classList.remove("done");
+      thumb.classList.remove("done");
+      thumb.innerHTML = "→";
+      text.textContent = "请按住滑块拖动到最右侧";
+      text.style.color = "#999";
+      submitBtn.disabled = true;
+      submitBtn.textContent = "请先完成验证";
+    }
+  };
+}
+
+function resetCaptcha(prefix) {
+  const captcha = document.getElementById(prefix + "Captcha");
+  if (!captcha || !captcha._captchaInstance) return;
+  captcha._captchaInstance.reset();
+}
+
+// 初始化登录验证
+const loginSubmitBtn = document.getElementById("loginSubmitBtn");
+loginSubmitBtn.dataset.originalText = "登录";
+const loginCaptchaBox = document.getElementById("loginCaptcha");
+loginCaptchaBox._captchaInstance = initCaptcha("login", loginSubmitBtn);
+
+// 初始化注册验证
+const regSubmitBtn = document.getElementById("regSubmitBtn");
+regSubmitBtn.dataset.originalText = "注册";
+const regCaptchaBox = document.getElementById("regCaptcha");
+regCaptchaBox._captchaInstance = initCaptcha("reg", regSubmitBtn);
 
 // 登录
 loginForm.addEventListener("submit", (e) => {
@@ -260,6 +363,7 @@ loginForm.addEventListener("submit", (e) => {
   );
   if (!found) {
     loginError.textContent = "用户名或密码错误";
+    resetCaptcha("login");
     return;
   }
   setSession(found.id);
@@ -267,6 +371,7 @@ loginForm.addEventListener("submit", (e) => {
   loginUsername.value = "";
   loginPassword.value = "";
   loginError.textContent = "";
+  resetCaptcha("login");
   initApp();
 });
 
@@ -279,19 +384,23 @@ registerForm.addEventListener("submit", (e) => {
   const pwd2 = regPassword2.value;
   if (!/^[a-zA-Z0-9_\u4e00-\u9fa5]{3,20}$/.test(username)) {
     registerError.textContent = "用户名需3-20位字母、数字、中文或下划线";
+    resetCaptcha("reg");
     return;
   }
   if (pwd.length < 6) {
     registerError.textContent = "密码至少6位";
+    resetCaptcha("reg");
     return;
   }
   if (pwd !== pwd2) {
     registerError.textContent = "两次密码不一致";
+    resetCaptcha("reg");
     return;
   }
   const accounts = loadAccounts();
   if (Object.values(accounts).some((a) => a.username === username)) {
     registerError.textContent = "用户名已存在";
+    resetCaptcha("reg");
     return;
   }
   const id = "u_" + Date.now().toString(36);
@@ -311,6 +420,7 @@ registerForm.addEventListener("submit", (e) => {
   regPassword.value = "";
   regPassword2.value = "";
   registerError.textContent = "";
+  resetCaptcha("reg");
   initApp();
 });
 
