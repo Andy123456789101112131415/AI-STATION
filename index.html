@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>自定义AI平台</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+  <!-- 侧边栏 -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+      <span class="logo">AI 平台</span>
+      <button class="btn-new-chat" id="btnNewChat" title="新对话">＋ 新对话</button>
+    </div>
+
+    <!-- 对话列表 -->
+    <div class="chat-list" id="chatList"></div>
+
+    <!-- 底部设置区 -->
+    <div class="sidebar-footer">
+      <button class="btn-settings" id="btnSettings">API 设置</button>
+    </div>
+  </aside>
+
+  <!-- 主区域 -->
+  <main class="main">
+    <!-- 顶部：当前AI名称 -->
+    <header class="chat-header">
+      <button class="btn-toggle-sidebar" id="btnToggleSidebar">☰</button>
+      <span class="ai-name-display" id="aiNameDisplay">未配置AI</span>
+    </header>
+
+    <!-- 消息区 -->
+    <section class="messages" id="messages">
+      <div class="welcome">
+        <h2>欢迎使用自定义AI平台</h2>
+        <p>请先在左侧「API 设置」中配置你的 AI 名称和 API 密钥，然后开始对话。</p>
+      </div>
+    </section>
+
+    <!-- 输入区 -->
+    <footer class="input-area">
+      <!-- 工具栏 -->
+      <div class="input-toolbar" id="inputToolbar" style="display:none">
+        <button class="toolbar-btn" id="btnCompare" title="多模型对比">多模型对比</button>
+        <button class="toolbar-btn" id="btnAnalyze" title="分析对话历史">历史分析</button>
+      </div>
+
+      <div class="input-wrapper">
+        <textarea
+          id="userInput"
+          placeholder="输入你的消息... (Enter 发送, Shift+Enter 换行)"
+          rows="1"
+        ></textarea>
+        <button class="btn-send" id="btnSend" title="发送">&#10148;</button>
+      </div>
+      <p class="input-hint">内容由AI生成，仅供参考</p>
+    </footer>
+  </main>
+
+  <!-- 设置弹窗 -->
+  <div class="modal-overlay" id="modalOverlay">
+    <div class="modal modal-wide" id="settingsModal">
+      <h3>API 设置（当前对话）</h3>
+
+      <!-- 基础配置 -->
+      <div class="modal-section">
+        <h4>基础配置</h4>
+        <label>AI 名称 <input type="text" id="settingAiName" placeholder="例如：DeepSeek、GPT-4o" /></label>
+        <label>API 地址 <input type="text" id="settingApiUrl" placeholder="https://api.deepseek.com/v1/chat/completions" /></label>
+        <label>API 密钥 <input type="password" id="settingApiKey" placeholder="sk-xxxxxxxxxxxxxxxx" /></label>
+        <label>模型名称 <input type="text" id="settingModel" placeholder="deepseek-chat" /></label>
+      </div>
+
+      <!-- 功能开关 -->
+      <div class="modal-section">
+        <h4>功能开关</h4>
+        <label class="checkbox-label">
+          <input type="checkbox" id="settingMultiModel" />
+          <span>多模型对比</span>
+          <small>同时向多个模型发送，对比回复结果</small>
+        </label>
+        <label class="checkbox-label">
+          <input type="checkbox" id="settingHistoryAnalysis" />
+          <span>历史记录分析</span>
+          <small>一键分析当前对话的主题、要点和趋势</small>
+        </label>
+      </div>
+
+      <!-- 对比模型配置 -->
+      <div class="modal-section" id="compareModelsSection" style="display:none">
+        <h4>对比模型</h4>
+        <div class="compare-model-row">
+          <label>模型1 名称 <input type="text" id="cmp1Name" placeholder="对比模型1" /></label>
+          <label>API 地址 <input type="text" id="cmp1Url" placeholder="https://api.openai.com/v1/chat/completions" /></label>
+          <label>密钥 <input type="password" id="cmp1Key" placeholder="sk-..." /></label>
+          <label>模型 <input type="text" id="cmp1Model" placeholder="gpt-4o" /></label>
+        </div>
+        <div class="compare-model-row">
+          <label>模型2 名称 <input type="text" id="cmp2Name" placeholder="对比模型2" /></label>
+          <label>API 地址 <input type="text" id="cmp2Url" placeholder="" /></label>
+          <label>密钥 <input type="password" id="cmp2Key" placeholder="" /></label>
+          <label>模型 <input type="text" id="cmp2Model" placeholder="" /></label>
+        </div>
+      </div>
+
+      <div class="modal-actions">
+        <button class="btn-primary" id="btnSaveSettings">保存</button>
+        <button class="btn-secondary" id="btnCloseModal">取消</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
