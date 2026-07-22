@@ -1,4 +1,5 @@
 node_modules/
+data/
 .vscode/
 .DS_Store
 Thumbs.db
