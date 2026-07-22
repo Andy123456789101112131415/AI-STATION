@@ -1,0 +1,54 @@
+{
+  "globalSettings": {
+    "aiName": "DeepSeek",
+    "apiUrl": "https://api.deepseek.com/v1/chat/completions",
+    "apiKey": "",
+    "model": "deepseek-chat",
+    "enableMultiModel": false,
+    "enableStats": false,
+    "compareModels": [
+      {
+        "aiName": "",
+        "apiUrl": "",
+        "apiKey": "",
+        "model": ""
+      },
+      {
+        "aiName": "",
+        "apiUrl": "",
+        "apiKey": "",
+        "model": ""
+      }
+    ]
+  },
+  "chats": [
+    {
+      "id": "mrvqaeqyvou0gr",
+      "title": "新对话",
+      "messages": [],
+      "settings": {
+        "aiName": "DeepSeek",
+        "apiUrl": "https://api.deepseek.com/v1/chat/completions",
+        "apiKey": "",
+        "model": "deepseek-chat",
+        "enableMultiModel": false,
+        "enableStats": false,
+        "compareModels": [
+          {
+            "aiName": "",
+            "apiUrl": "",
+            "apiKey": "",
+            "model": ""
+          },
+          {
+            "aiName": "",
+            "apiUrl": "",
+            "apiKey": "",
+            "model": ""
+          }
+        ]
+      }
+    }
+  ],
+  "activeChatId": "mrvqaeqyvou0gr"
+}

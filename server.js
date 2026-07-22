@@ -46,11 +46,6 @@ function hashPassword(pwd) {
 }
 
 // ========== 工具函数 ==========
-function resJSON(res, code, obj) {
-  res.writeHead(code, { "Content-Type": "application/json" });
-  res.end(JSON.stringify(obj));
-}
-
 function isPayConfigured() {
   return PAYJS_MCHID !== "你的商户号" && PAYJS_KEY !== "你的密钥" && PAYJS_MCHID && PAYJS_KEY;
 }
@@ -121,6 +116,11 @@ function serveStatic(res, filePath) {
 }
 
 const server = http.createServer((req, res) => {
+  function resJSON(code, obj) {
+    res.writeHead(code, { "Content-Type": "application/json" });
+    res.end(JSON.stringify(obj));
+  }
+
   // CORS
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");

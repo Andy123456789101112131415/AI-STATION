@@ -188,6 +188,7 @@ async function startPay(tier, amount) {
         vipOverlay.classList.remove("show");
         payArea.style.display = "none";
         resetPayUI();
+        vipJustUpgraded = true;
         applySettingsToUI();
         renderAccountUI();
         alert("VIP 已开通！（测试模式）");
@@ -219,6 +220,7 @@ async function startPay(tier, amount) {
           vipOverlay.classList.remove("show");
           payArea.style.display = "none";
           resetPayUI();
+          vipJustUpgraded = true;
           applySettingsToUI();
           renderAccountUI();
           alert("VIP 已开通，欢迎使用全部功能！");
@@ -236,6 +238,7 @@ async function startPay(tier, amount) {
       vipOverlay.classList.remove("show");
       payArea.style.display = "none";
       resetPayUI();
+      vipJustUpgraded = true;
       applySettingsToUI();
       renderAccountUI();
       alert("VIP 已开通！（测试模式）");
@@ -464,19 +467,19 @@ function renderAccountUI() {
     loginOverlay.classList.add("show");
     return;
   }
-  // 尝试从API恢复
-  apiCall("/api/account", { accountId: session.accountId }).then((acc) => {
-    if (!acc || acc.error) { clearSession(); location.reload(); return; }
-    currentAccount = { id: session.accountId, username: acc.username, displayName: acc.displayName, tier: acc.tier, isVip: acc.tier !== "free" };
-    accountAvatar.textContent = (acc.displayName || acc.username).charAt(0).toUpperCase();
-    const vipLabel = isVip() ? '<span style="color:#22a699;font-size:10px;margin-left:4px">VIP</span>' : '<span class="free-badge">免费</span>';
-    accountName.innerHTML = (acc.displayName || acc.username) + vipLabel;
-    loginOverlay.classList.remove("show");
-    if (!isVip()) setTimeout(() => showVipModal(), 600);
-  }).catch(() => {
-    // 无网络时尝试本地
-    if (!currentAccount) { clearSession(); location.reload(); }
-  });
+  if (!currentAccount) {
+    accountAvatar.textContent = "?";
+    accountName.textContent = "加载中...";
+    return;
+  }
+  accountAvatar.textContent = (currentAccount.displayName || currentAccount.username).charAt(0).toUpperCase();
+  const vipLabel = isVip() ? '<span style="color:#22a699;font-size:10px;margin-left:4px">VIP</span>' : '<span class="free-badge">免费</span>';
+  accountName.innerHTML = (currentAccount.displayName || currentAccount.username) + vipLabel;
+  loginOverlay.classList.remove("show");
+
+  if (!isVip() && !vipJustUpgraded) {
+    setTimeout(() => showVipModal(), 600);
+  }
 }
 
 /* ========== 状态（服务端存储） ========== */
@@ -1355,14 +1358,24 @@ document.addEventListener("keydown", (e) => {
 });
 
 /* ========== 启动 ========== */
-async function initApp() {
-  renderAccountUI();
+let vipJustUpgraded = false;
 
+async function initApp() {
   const session = getSession();
   if (!session) {
     loginOverlay.classList.add("show");
+    renderAccountUI();
     return;
   }
+
+  // 从服务器恢复账号信息
+  try {
+    const acc = await apiCall("/api/account", { accountId: session.accountId });
+    if (acc && !acc.error) {
+      currentAccount = { id: session.accountId, username: acc.username, displayName: acc.displayName, tier: acc.tier, isVip: acc.tier !== "free" };
+    }
+  } catch {}
+  renderAccountUI();
 
   state = (await loadState()) || defaultState();
 
