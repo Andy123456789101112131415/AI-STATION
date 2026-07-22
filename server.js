@@ -5,12 +5,56 @@ const fs = require("fs");
 const path = require("path");
 
 // ========== 配置 ==========
-// 在 payjs.cn 注册后替换这里
 const PAYJS_MCHID = "你的商户号";
 const PAYJS_KEY = "你的密钥";
 const PORT = 3456;
+const DATA_DIR = path.join(__dirname, "data");
+const ACCOUNTS_FILE = path.join(DATA_DIR, "accounts.json");
+const USERS_DIR = path.join(DATA_DIR, "users");
 
-// ========== PayJS 工具 ==========
+// 确保目录存在
+if (!fs.existsSync(USERS_DIR)) fs.mkdirSync(USERS_DIR, { recursive: true });
+
+// ========== 文件存储 ==========
+function readJSON(filePath) {
+  try { return JSON.parse(fs.readFileSync(filePath, "utf8")); }
+  catch { return null; }
+}
+
+function writeJSON(filePath, data) {
+  fs.writeFileSync(filePath, JSON.stringify(data, null, 2), "utf8");
+}
+
+function loadAccounts() {
+  return readJSON(ACCOUNTS_FILE) || {};
+}
+
+function saveAccounts(accs) {
+  writeJSON(ACCOUNTS_FILE, accs);
+}
+
+function loadUserData(accountId) {
+  return readJSON(path.join(USERS_DIR, accountId + ".json"));
+}
+
+function saveUserData(accountId, data) {
+  writeJSON(path.join(USERS_DIR, accountId + ".json"), data);
+}
+
+function hashPassword(pwd) {
+  return crypto.createHash("sha256").update("salt_" + pwd).digest("hex");
+}
+
+// ========== 工具函数 ==========
+function resJSON(res, code, obj) {
+  res.writeHead(code, { "Content-Type": "application/json" });
+  res.end(JSON.stringify(obj));
+}
+
+function isPayConfigured() {
+  return PAYJS_MCHID !== "你的商户号" && PAYJS_KEY !== "你的密钥" && PAYJS_MCHID && PAYJS_KEY;
+}
+
 function payjsSign(params) {
   const sorted = Object.keys(params).sort();
   const str = sorted.map((k) => k + "=" + params[k]).join("&") + "&key=" + PAYJS_KEY;
@@ -90,12 +134,119 @@ const server = http.createServer((req, res) => {
 
   const url = new URL(req.url, "http://localhost");
 
-  // 检查 PayJS 是否已配置
-  function isPayConfigured() {
-    return PAYJS_MCHID !== "你的商户号" && PAYJS_KEY !== "你的密钥" && PAYJS_MCHID && PAYJS_KEY;
+  // ========== 账号 API ==========
+
+  // 注册
+  if (url.pathname === "/api/register" && req.method === "POST") {
+    let body = "";
+    req.on("data", (c) => (body += c));
+    req.on("end", () => {
+      try {
+        const { username, password, displayName } = JSON.parse(body);
+        if (!username || !password) { resJSON(400, { error: "用户名和密码必填" }); return; }
+        const accounts = loadAccounts();
+        if (Object.values(accounts).some((a) => a.username === username)) {
+          resJSON(400, { error: "用户名已存在" }); return;
+        }
+        const id = "u_" + Date.now().toString(36);
+        accounts[id] = {
+          id, username, displayName: displayName || username,
+          passwordHash: hashPassword(password),
+          createdAt: Date.now(),
+          tier: "free", messageCountToday: 0, lastMessageDate: "",
+        };
+        saveAccounts(accounts);
+        resJSON(200, { success: true, accountId: id, account: { id, username, displayName: accounts[id].displayName, tier: "free" } });
+      } catch (e) { resJSON(400, { error: e.message }); }
+    });
+    return;
   }
 
-  // API: 创建支付订单
+  // 登录
+  if (url.pathname === "/api/login" && req.method === "POST") {
+    let body = "";
+    req.on("data", (c) => (body += c));
+    req.on("end", () => {
+      try {
+        const { username, password } = JSON.parse(body);
+        const accounts = loadAccounts();
+        const found = Object.values(accounts).find(
+          (a) => a.username === username && a.passwordHash === hashPassword(password)
+        );
+        if (!found) { resJSON(401, { error: "用户名或密码错误" }); return; }
+        resJSON(200, { success: true, accountId: found.id, account: { id: found.id, username: found.username, displayName: found.displayName, tier: found.tier } });
+      } catch (e) { resJSON(400, { error: e.message }); }
+    });
+    return;
+  }
+
+  // 获取用户数据
+  if (url.pathname === "/api/load" && req.method === "POST") {
+    let body = "";
+    req.on("data", (c) => (body += c));
+    req.on("end", () => {
+      try {
+        const { accountId } = JSON.parse(body);
+        const data = loadUserData(accountId);
+        resJSON(200, { data: data || null });
+      } catch (e) { resJSON(400, { error: e.message }); }
+    });
+    return;
+  }
+
+  // 保存用户数据
+  if (url.pathname === "/api/save" && req.method === "POST") {
+    let body = "";
+    req.on("data", (c) => (body += c));
+    req.on("end", () => {
+      try {
+        const { accountId, data } = JSON.parse(body);
+        saveUserData(accountId, data);
+        resJSON(200, { success: true });
+      } catch (e) { resJSON(400, { error: e.message }); }
+    });
+    return;
+  }
+
+  // 获取账号信息（VIP状态等）
+  if (url.pathname === "/api/account" && req.method === "POST") {
+    let body = "";
+    req.on("data", (c) => (body += c));
+    req.on("end", () => {
+      try {
+        const { accountId } = JSON.parse(body);
+        const accounts = loadAccounts();
+        const acc = accounts[accountId];
+        if (!acc) { resJSON(404, { error: "账号不存在" }); return; }
+        // 检查VIP过期
+        if (acc.tier === "vip_monthly" && acc.vipExpiry && acc.vipExpiry <= Date.now()) {
+          acc.tier = "free"; delete acc.vipExpiry; saveAccounts(accounts);
+        }
+        const isVip = acc.tier === "vip_lifetime" || (acc.tier === "vip_monthly" && acc.vipExpiry > Date.now());
+        resJSON(200, { username: acc.username, displayName: acc.displayName, tier: acc.tier, isVip, messageCountToday: acc.messageCountToday || 0, lastMessageDate: acc.lastMessageDate || "" });
+      } catch (e) { resJSON(400, { error: e.message }); }
+    });
+    return;
+  }
+
+  // 更新账号（VIP升级、消息计数等）
+  if (url.pathname === "/api/account-update" && req.method === "POST") {
+    let body = "";
+    req.on("data", (c) => (body += c));
+    req.on("end", () => {
+      try {
+        const { accountId, updates } = JSON.parse(body);
+        const accounts = loadAccounts();
+        if (!accounts[accountId]) { resJSON(404, { error: "账号不存在" }); return; }
+        Object.assign(accounts[accountId], updates);
+        saveAccounts(accounts);
+        resJSON(200, { success: true });
+      } catch (e) { resJSON(400, { error: e.message }); }
+    });
+    return;
+  }
+
+  // ========== PayJS 支付 ==========
   if (url.pathname === "/api/create-order" && req.method === "POST") {
     if (!isPayConfigured()) {
       res.writeHead(200, { "Content-Type": "application/json" });

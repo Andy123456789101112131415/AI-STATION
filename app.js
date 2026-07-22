@@ -30,28 +30,10 @@ const btnSaveSettings = $("#btnSaveSettings");
 const btnCloseModal = $("#btnCloseModal");
 
 /* ========== 账号管理 ========== */
-const ACCOUNTS_KEY = "ai_platform_accounts";
+const API = "http://localhost:3456";
 const SESSION_KEY = "ai_platform_session";
 
-function hashPassword(pwd) {
-  // 简单哈希（客户端本地存储，非安全用途）
-  let h = 0;
-  for (let i = 0; i < pwd.length; i++) {
-    h = ((h << 5) - h + pwd.charCodeAt(i)) | 0;
-  }
-  return "p_" + Math.abs(h).toString(36);
-}
-
-function loadAccounts() {
-  try {
-    const raw = localStorage.getItem(ACCOUNTS_KEY);
-    return raw ? JSON.parse(raw) : {};
-  } catch { return {}; }
-}
-
-function saveAccounts(accs) {
-  localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(accs));
-}
+let currentAccount = null; // { id, username, displayName, tier, isVip }
 
 function getSession() {
   try {
@@ -66,57 +48,62 @@ function setSession(accountId) {
 
 function clearSession() {
   localStorage.removeItem(SESSION_KEY);
+  currentAccount = null;
+}
+
+async function apiCall(endpoint, body = {}) {
+  const resp = await fetch(API + endpoint, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  return resp.json();
+}
+
+async function loadAccounts() {
+  // 通过 account API 获取当前登录账号信息
+  const session = getSession();
+  if (!session) return {};
+  try {
+    const acc = await apiCall("/api/account", { accountId: session.accountId });
+    currentAccount = acc;
+    return { [session.accountId]: acc };
+  } catch { return {}; }
+}
+
+async function saveAccounts(accs) {} // 无需前端调用，服务器自动保存
+
+function hashPassword(pwd) {
+  return pwd; // 哈希在服务端做
 }
 
 /* ========== VIP 套餐 ========== */
 function getAccount() {
-  const session = getSession();
-  if (!session) return null;
-  const accounts = loadAccounts();
-  return accounts[session.accountId] || null;
+  return currentAccount;
 }
 
 function isVip() {
-  const acc = getAccount();
-  if (!acc) return false;
-  if (acc.tier === "vip_lifetime") return true;
-  if (acc.tier === "vip_monthly" && acc.vipExpiry && acc.vipExpiry > Date.now()) return true;
-  // 月付过期自动降级
-  if (acc.tier === "vip_monthly" && acc.vipExpiry && acc.vipExpiry <= Date.now()) {
-    acc.tier = "free";
-    delete acc.vipExpiry;
-    saveAccounts(loadAccounts()); // 这段需要修复 - 应该直接保存
-    return false;
-  }
-  return false;
-}
-
-function getTodayKey() {
-  return new Date().toISOString().slice(0, 10);
+  return currentAccount && currentAccount.isVip;
 }
 
 function getTodayMsgCount() {
-  const acc = getAccount();
-  if (!acc) return 0;
-  const today = getTodayKey();
-  if (acc.lastMessageDate !== today) return 0;
-  return acc.messageCountToday || 0;
+  if (!currentAccount) return 0;
+  const today = new Date().toISOString().slice(0, 10);
+  if (currentAccount.lastMessageDate !== today) return 0;
+  return currentAccount.messageCountToday || 0;
 }
 
-function incrementMsgCount() {
+async function incrementMsgCount() {
   const session = getSession();
   if (!session) return;
-  const accounts = loadAccounts();
-  const acc = accounts[session.accountId];
-  if (!acc) return;
-  const today = getTodayKey();
-  if (acc.lastMessageDate !== today) {
-    acc.lastMessageDate = today;
-    acc.messageCountToday = 1;
-  } else {
-    acc.messageCountToday = (acc.messageCountToday || 0) + 1;
-  }
-  saveAccounts(accounts);
+  const today = new Date().toISOString().slice(0, 10);
+  const count = currentAccount.lastMessageDate === today ? (currentAccount.messageCountToday || 0) + 1 : 1;
+  await apiCall("/api/account-update", {
+    accountId: session.accountId,
+    updates: { lastMessageDate: today, messageCountToday: count },
+  });
+  currentAccount.lastMessageDate = today;
+  currentAccount.messageCountToday = count;
 }
 
 function canSendMessage() {
@@ -127,6 +114,18 @@ function canSendMessage() {
 function remainingMessages() {
   if (isVip()) return Infinity;
   return Math.max(0, 3 - getTodayMsgCount());
+}
+
+async function upgradeToVip(tier) {
+  const session = getSession();
+  if (!session) return;
+  const updates = { tier };
+  if (tier === "vip_monthly") {
+    updates.vipExpiry = Date.now() + 30 * 24 * 60 * 60 * 1000;
+  }
+  await apiCall("/api/account-update", { accountId: session.accountId, updates });
+  currentAccount.tier = tier;
+  currentAccount.isVip = true;
 }
 
 function upgradeToVip(tier) {
@@ -184,12 +183,13 @@ async function startPay(tier, amount) {
       // PayJS 未配置，降级为模拟支付
       payQrcode.innerHTML = `<p style='color:var(--text-secondary);font-size:13px'>${data.error || "支付服务暂不可用"}</p>`;
       payStatus.innerHTML = '<button class="btn-primary" id="btnMockPay" style="margin-top:8px">模拟支付（测试用）</button>';
-      document.getElementById("btnMockPay").addEventListener("click", () => {
-        upgradeToVip(tier);
+      document.getElementById("btnMockPay").addEventListener("click", async () => {
+        await upgradeToVip(tier);
         vipOverlay.classList.remove("show");
         payArea.style.display = "none";
         resetPayUI();
         applySettingsToUI();
+        renderAccountUI();
         alert("VIP 已开通！（测试模式）");
       });
       return;
@@ -215,14 +215,13 @@ async function startPay(tier, amount) {
         if (checkData.paid) {
           clearInterval(payTimer);
           payStatus.innerHTML = '<span style="color:#22a699;font-weight:600">支付成功！正在开通...</span>';
-          upgradeToVip(tier);
-          setTimeout(() => {
-            vipOverlay.classList.remove("show");
-            payArea.style.display = "none";
-            resetPayUI();
-            applySettingsToUI();
-            alert("VIP 已开通，欢迎使用全部功能！");
-          }, 800);
+          await upgradeToVip(tier);
+          vipOverlay.classList.remove("show");
+          payArea.style.display = "none";
+          resetPayUI();
+          applySettingsToUI();
+          renderAccountUI();
+          alert("VIP 已开通，欢迎使用全部功能！");
         }
       } catch {}
     }, 3000);
@@ -232,8 +231,8 @@ async function startPay(tier, amount) {
       支付服务未启动<br><small>请运行 node server.js 或使用模拟支付</small>
     </p>`;
     payStatus.innerHTML = '<button class="btn-primary" id="btnMockPay" style="margin-top:8px">模拟支付（测试用）</button>';
-    document.getElementById("btnMockPay").addEventListener("click", () => {
-      upgradeToVip(tier);
+    document.getElementById("btnMockPay").addEventListener("click", async () => {
+      await upgradeToVip(tier);
       vipOverlay.classList.remove("show");
       payArea.style.display = "none";
       resetPayUI();
@@ -390,73 +389,45 @@ function initMathCaptcha(prefix, submitBtn) {
 }
 
 // 登录
-loginForm.addEventListener("submit", (e) => {
+loginForm.addEventListener("submit", async (e) => {
   e.preventDefault();
   const username = loginUsername.value.trim();
   const pwd = loginPassword.value;
-  const accounts = loadAccounts();
-  const found = Object.values(accounts).find(
-    (a) => a.username === username && a.passwordHash === hashPassword(pwd)
-  );
-  if (!found) {
-    loginError.textContent = "用户名或密码错误";
-    if (typeof turnstile !== "undefined") turnstile.reset("#loginForm .cf-turnstile");
-    return;
-  }
-  setSession(found.id);
-  loginOverlay.classList.remove("show");
-  loginUsername.value = "";
-  loginPassword.value = "";
-  loginError.textContent = "";
-  initApp();
+  try {
+    const result = await apiCall("/api/login", { username, password: pwd });
+    if (!result.success) { loginError.textContent = result.error || "登录失败"; return; }
+    setSession(result.accountId);
+    currentAccount = { id: result.accountId, username: result.account.username, displayName: result.account.displayName, tier: result.account.tier, isVip: result.account.tier !== "free" };
+    loginOverlay.classList.remove("show");
+    loginUsername.value = "";
+    loginPassword.value = "";
+    loginError.textContent = "";
+    initApp();
+  } catch (err) { loginError.textContent = "网络错误，请确认服务器已启动"; }
 });
 
 // 注册
-registerForm.addEventListener("submit", (e) => {
+registerForm.addEventListener("submit", async (e) => {
   e.preventDefault();
   const username = regUsername.value.trim();
   const displayName = regDisplayName.value.trim() || username;
   const pwd = regPassword.value;
   const pwd2 = regPassword2.value;
   if (!/^[a-zA-Z0-9_\u4e00-\u9fa5]{3,20}$/.test(username)) {
-    registerError.textContent = "用户名需3-20位字母、数字、中文或下划线";
-    if (typeof turnstile !== "undefined") turnstile.reset("#registerForm .cf-turnstile");
-    return;
+    registerError.textContent = "用户名需3-20位字母、数字、中文或下划线"; return;
   }
-  if (pwd.length < 6) {
-    registerError.textContent = "密码至少6位";
-    if (typeof turnstile !== "undefined") turnstile.reset("#registerForm .cf-turnstile");
-    return;
-  }
-  if (pwd !== pwd2) {
-    registerError.textContent = "两次密码不一致";
-    if (typeof turnstile !== "undefined") turnstile.reset("#registerForm .cf-turnstile");
-    return;
-  }
-  const accounts = loadAccounts();
-  if (Object.values(accounts).some((a) => a.username === username)) {
-    registerError.textContent = "用户名已存在";
-    if (typeof turnstile !== "undefined") turnstile.reset("#registerForm .cf-turnstile");
-    return;
-  }
-  const id = "u_" + Date.now().toString(36);
-  accounts[id] = {
-    id, username, displayName,
-    passwordHash: hashPassword(pwd),
-    createdAt: Date.now(),
-    tier: "free",
-    messageCountToday: 0,
-    lastMessageDate: "",
-  };
-  saveAccounts(accounts);
-  setSession(id);
-  loginOverlay.classList.remove("show");
-  regUsername.value = "";
-  regDisplayName.value = "";
-  regPassword.value = "";
-  regPassword2.value = "";
-  registerError.textContent = "";
-  initApp();
+  if (pwd.length < 6) { registerError.textContent = "密码至少6位"; return; }
+  if (pwd !== pwd2) { registerError.textContent = "两次密码不一致"; return; }
+  try {
+    const result = await apiCall("/api/register", { username, password: pwd, displayName });
+    if (!result.success) { registerError.textContent = result.error || "注册失败"; return; }
+    setSession(result.accountId);
+    currentAccount = { id: result.accountId, username, displayName, tier: "free", isVip: false };
+    loginOverlay.classList.remove("show");
+    regUsername.value = ""; regDisplayName.value = ""; regPassword.value = ""; regPassword2.value = "";
+    registerError.textContent = "";
+    initApp();
+  } catch (err) { registerError.textContent = "网络错误，请确认服务器已启动"; }
 });
 
 // 账号菜单
@@ -493,39 +464,37 @@ function renderAccountUI() {
     loginOverlay.classList.add("show");
     return;
   }
-  const accounts = loadAccounts();
-  const acc = accounts[session.accountId];
-  if (!acc) {
-    clearSession();
-    location.reload();
-    return;
-  }
-  accountAvatar.textContent = (acc.displayName || acc.username).charAt(0).toUpperCase();
-  const vipLabel = isVip() ? '<span style="color:#22a699;font-size:10px;margin-left:4px">VIP</span>' : '<span class="free-badge">免费</span>';
-  accountName.innerHTML = (acc.displayName || acc.username) + vipLabel;
-  loginOverlay.classList.remove("show");
-
-  // 免费用户弹 VIP 升级窗
-  if (!isVip()) {
-    setTimeout(() => showVipModal(), 600);
-  }
+  // 尝试从API恢复
+  apiCall("/api/account", { accountId: session.accountId }).then((acc) => {
+    if (!acc || acc.error) { clearSession(); location.reload(); return; }
+    currentAccount = { id: session.accountId, username: acc.username, displayName: acc.displayName, tier: acc.tier, isVip: acc.tier !== "free" };
+    accountAvatar.textContent = (acc.displayName || acc.username).charAt(0).toUpperCase();
+    const vipLabel = isVip() ? '<span style="color:#22a699;font-size:10px;margin-left:4px">VIP</span>' : '<span class="free-badge">免费</span>';
+    accountName.innerHTML = (acc.displayName || acc.username) + vipLabel;
+    loginOverlay.classList.remove("show");
+    if (!isVip()) setTimeout(() => showVipModal(), 600);
+  }).catch(() => {
+    // 无网络时尝试本地
+    if (!currentAccount) { clearSession(); location.reload(); }
+  });
 }
 
-/* ========== 状态（账号隔离） ========== */
-function getStorageKey() {
+/* ========== 状态（服务端存储） ========== */
+let state = null;
+
+async function loadState() {
   const session = getSession();
-  return session ? "ai_platform_data_" + session.accountId : "ai_platform_data";
-}
-
-function loadState() {
+  if (!session) return null;
   try {
-    const raw = localStorage.getItem(getStorageKey());
-    return raw ? JSON.parse(raw) : null;
+    const result = await apiCall("/api/load", { accountId: session.accountId });
+    return result.data;
   } catch { return null; }
 }
 
-function saveState(st) {
-  localStorage.setItem(getStorageKey(), JSON.stringify(st));
+async function saveState(st) {
+  const session = getSession();
+  if (!session) return;
+  try { await apiCall("/api/save", { accountId: session.accountId, data: st }); } catch {}
 }
 
 function defaultSettings() {
@@ -552,8 +521,6 @@ function defaultState() {
     activeChatId: null,
   };
 }
-
-let state = null;
 
 /* ========== 获取当前活跃 Chat 的 settings ========== */
 function getChatSettings() {
@@ -1388,35 +1355,30 @@ document.addEventListener("keydown", (e) => {
 });
 
 /* ========== 启动 ========== */
-function initApp() {
-  migrateOldData();
+async function initApp() {
   renderAccountUI();
 
-  // 检查登录状态
   const session = getSession();
   if (!session) {
     loginOverlay.classList.add("show");
-    return; // 未登录，不加载数据
+    return;
   }
 
-  // 加载当前账号数据
-  state = loadState() || defaultState();
+  state = (await loadState()) || defaultState();
 
-  // 兼容旧 chat
-  state.chats.forEach((chat) => {
-    if (!chat.settings) {
-      chat.settings = { ...(state.globalSettings || defaultSettings()) };
-    }
-  });
+  if (state.chats) {
+    state.chats.forEach((chat) => {
+      if (!chat.settings) chat.settings = { ...(state.globalSettings || defaultSettings()) };
+    });
+  }
 
   applySettingsToUI();
   renderChatList();
   renderMessages();
 
-  if (state.chats.length === 0) {
+  if (!state.chats || state.chats.length === 0) {
     newChat();
   }
 }
 
-// 启动
 initApp();
