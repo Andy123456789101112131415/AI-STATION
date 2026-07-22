@@ -118,29 +118,15 @@ function remainingMessages() {
 
 async function upgradeToVip(tier) {
   const session = getSession();
-  if (!session) return;
+  if (!session) throw new Error("未登录");
   const updates = { tier };
   if (tier === "vip_monthly") {
     updates.vipExpiry = Date.now() + 30 * 24 * 60 * 60 * 1000;
   }
-  await apiCall("/api/account-update", { accountId: session.accountId, updates });
+  const result = await apiCall("/api/account-update", { accountId: session.accountId, updates });
+  if (!result.success) throw new Error(result.error || "升级失败");
   currentAccount.tier = tier;
   currentAccount.isVip = true;
-}
-
-function upgradeToVip(tier) {
-  const session = getSession();
-  if (!session) return;
-  const accounts = loadAccounts();
-  const acc = accounts[session.accountId];
-  if (!acc) return;
-  acc.tier = tier;
-  if (tier === "vip_monthly") {
-    acc.vipExpiry = Date.now() + 30 * 24 * 60 * 60 * 1000;
-  } else {
-    delete acc.vipExpiry;
-  }
-  saveAccounts(accounts);
 }
 
 // VIP 弹窗
