@@ -691,7 +691,7 @@ function renderMessages() {
   chat.messages.forEach((msg) => {
     appendMessageBubble(msg.role, msg.content, false, msg.reasoning || "");
   });
-  scrollToBottom();
+  scrollToBottom(true);
 }
 
 function createThinkingSection() {
@@ -752,7 +752,7 @@ function appendMessageBubble(role, content, isStreaming = false, reasoning = "")
 
   div.appendChild(body);
   messages.appendChild(div);
-  scrollToBottom();
+  scrollToBottom(true);
   return { div, body, thinking };
 }
 
@@ -785,7 +785,12 @@ function renderMarkdown(text) {
 }
 
 /* ========== 滚动 ========== */
-function scrollToBottom() {
+function scrollToBottom(force = false) {
+  if (!force) {
+    // 用户已上滑则不动
+    const atBottom = messages.scrollHeight - messages.scrollTop - messages.clientHeight < 80;
+    if (!atBottom) return;
+  }
   messages.scrollTop = messages.scrollHeight;
 }
 
@@ -1090,7 +1095,7 @@ async function sendCompareMessages(content) {
   });
 
   messages.appendChild(container);
-  scrollToBottom();
+  scrollToBottom(true);
 
   // 并行请求所有模型
   const promises = cards.map(async ({ body, model }) => {

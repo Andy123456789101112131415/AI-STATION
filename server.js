@@ -5,27 +5,27 @@ const fs = require("fs");
 const path = require("path");
 
 // ========== 配置 ==========
-// 在 xorpay.com 注册后替换这里
-const XORPAY_APPID = "你的AppID";
-const XORPAY_SECRET = "你的Secret";
+// 在 payjs.cn 注册后替换这里
+const PAYJS_MCHID = "你的商户号";
+const PAYJS_KEY = "你的密钥";
 const PORT = 3456;
 
-// ========== XorPay 工具 ==========
-function xorpaySign(params) {
+// ========== PayJS 工具 ==========
+function payjsSign(params) {
   const sorted = Object.keys(params).sort();
-  const str = sorted.map((k) => k + "=" + params[k]).join("&") + XORPAY_SECRET;
-  return crypto.createHash("md5").update(str, "utf8").digest("hex");
+  const str = sorted.map((k) => k + "=" + params[k]).join("&") + "&key=" + PAYJS_KEY;
+  return crypto.createHash("md5").update(str, "utf8").digest("hex").toUpperCase();
 }
 
-function xorpayRequest(path, params) {
+function payjsRequest(path, params) {
   return new Promise((resolve, reject) => {
-    params.appid = XORPAY_APPID;
-    params.sign = xorpaySign(params);
+    params.mchid = PAYJS_MCHID;
+    params.sign = payjsSign(params);
     const body = new URLSearchParams(params).toString();
 
     const req = https.request(
       {
-        hostname: "xorpay.com",
+        hostname: "payjs.cn",
         path: path,
         method: "POST",
         headers: {
@@ -40,7 +40,7 @@ function xorpayRequest(path, params) {
           try {
             resolve(JSON.parse(data));
           } catch {
-            reject(new Error("XorPay 响应解析失败: " + data));
+            reject(new Error("PayJS 响应解析失败: " + data));
           }
         });
       }
@@ -90,16 +90,16 @@ const server = http.createServer((req, res) => {
 
   const url = new URL(req.url, "http://localhost");
 
-  // 检查 XorPay 是否已配置
+  // 检查 PayJS 是否已配置
   function isPayConfigured() {
-    return XORPAY_APPID !== "你的AppID" && XORPAY_SECRET !== "你的Secret" && XORPAY_APPID && XORPAY_SECRET;
+    return PAYJS_MCHID !== "你的商户号" && PAYJS_KEY !== "你的密钥" && PAYJS_MCHID && PAYJS_KEY;
   }
 
   // API: 创建支付订单
   if (url.pathname === "/api/create-order" && req.method === "POST") {
     if (!isPayConfigured()) {
       res.writeHead(200, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ success: false, error: "管理员尚未配置XorPay，请在 server.js 中填写 AppID 和 Secret" }));
+      res.end(JSON.stringify({ success: false, error: "管理员尚未配置PayJS，请在 server.js 中填写商户号和密钥" }));
       return;
     }
     let body = "";
@@ -107,22 +107,22 @@ const server = http.createServer((req, res) => {
     req.on("end", async () => {
       try {
         const { amount, type } = JSON.parse(body);
+        const totalFee = amount * 100; // PayJS 用分
         const outTradeNo = "VIP" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 
-        const result = await xorpayRequest("/api/pay", {
-          name: type === "monthly" ? "月度VIP" : "终生VIP",
-          pay_type: "native",
-          price: amount,
+        const result = await payjsRequest("/api/native", {
+          body: type === "monthly" ? "月度VIP" : "终生VIP",
           out_trade_no: outTradeNo,
+          total_fee: totalFee,
         });
 
-        if (result.status === "ok" && result.info) {
+        if (result.return_code === 1) {
           orders[outTradeNo] = { type, amount, paid: false, createdAt: Date.now() };
           res.writeHead(200, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ success: true, qrcode: result.info.qrcode, outTradeNo }));
+          res.end(JSON.stringify({ success: true, code_url: result.code_url, qrcode: result.qrcode, outTradeNo }));
         } else {
           res.writeHead(400, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ success: false, error: result.msg || "创建订单失败" }));
+          res.end(JSON.stringify({ success: false, error: result.return_msg || "创建订单失败" }));
         }
       } catch (err) {
         res.writeHead(500, { "Content-Type": "application/json" });
@@ -144,13 +144,15 @@ const server = http.createServer((req, res) => {
     req.on("end", async () => {
       try {
         const { outTradeNo } = JSON.parse(body);
+        // 先查本地缓存
         if (orders[outTradeNo] && orders[outTradeNo].paid) {
           res.writeHead(200, { "Content-Type": "application/json" });
           res.end(JSON.stringify({ paid: true, type: orders[outTradeNo].type }));
           return;
         }
-        const result = await xorpayRequest("/api/order_query", { out_trade_no: outTradeNo });
-        if (result.status === "ok" && result.info && result.info.status === "paid") {
+        // 再查 PayJS
+        const result = await payjsRequest("/api/check", { out_trade_no: outTradeNo });
+        if (result.return_code === 1 && result.status === 1) {
           orders[outTradeNo] = orders[outTradeNo] || {};
           orders[outTradeNo].paid = true;
           res.writeHead(200, { "Content-Type": "application/json" });
@@ -167,15 +169,15 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  // XorPay 异步回调
-  if (url.pathname === "/api/pay-notify" && req.method === "POST") {
+  // PayJS 异步回调
+  if (url.pathname === "/api/payjs-notify" && req.method === "POST") {
     let body = "";
     req.on("data", (c) => (body += c));
     req.on("end", () => {
       const params = Object.fromEntries(new URLSearchParams(body));
       const sign = params.sign;
       delete params.sign;
-      if (xorpaySign(params) === sign && params.status === "paid") {
+      if (payjsSign(params) === sign && params.return_code === "1") {
         orders[params.out_trade_no] = orders[params.out_trade_no] || {};
         orders[params.out_trade_no].paid = true;
         res.end("success");
@@ -193,8 +195,8 @@ const server = http.createServer((req, res) => {
 
 server.listen(PORT, () => {
   console.log(`服务已启动: http://localhost:${PORT}`);
-  if (XORPAY_APPID === "你的AppID") {
-    console.log("⚠ 请先在 server.js 中填写 XORPAY_APPID 和 XORPAY_SECRET");
-    console.log("  注册地址: https://xorpay.com");
+  if (PAYJS_MCHID === "你的商户号") {
+    console.log("⚠ 请先在 server.js 中填写 PAYJS_MCHID 和 PAYJS_KEY");
+    console.log("  未配置时点击支付会显示友好提示，不会报错");
   }
 });
