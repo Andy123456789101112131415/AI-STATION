@@ -713,31 +713,156 @@ function appendMessageBubble(role, content, isStreaming = false, reasoning = "")
 }
 
 /* ========== 简易 Markdown 渲染 ========== */
-function renderMarkdown(text) {
-  // 转义 HTML
-  let html = text
+function escapeHtml(str) {
+  return str
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
 
-  // 代码块 ```
-  html = html.replace(/```(\w*)\n([\s\S]*?)```/g, (_, lang, code) => {
-    return `<pre><code class="language-${lang}">${code.trim()}</code></pre>`;
-  });
+// 行内渲染：加粗、斜体、行内代码、链接、删除线
+function renderInline(text) {
+  let s = escapeHtml(text);
+  // 行内代码（先处理，避免内部符号被错误替换）
+  s = s.replace(/`([^`]+)`/g, (_, code) => `<code>${code}</code>`);
+  // 加粗
+  s = s.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+  s = s.replace(/__(.+?)__/g, "<strong>$1</strong>");
+  // 斜体
+  s = s.replace(/(^|[^*])\*([^*\n]+?)\*/g, "$1<em>$2</em>");
+  // 删除线
+  s = s.replace(/~~(.+?)~~/g, "<del>$1</del>");
+  // 链接 [text](url)
+  s = s.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+  return s;
+}
 
-  // 行内代码 `
-  html = html.replace(/`([^`]+)`/g, "<code>$1</code>");
+function splitRow(line) {
+  let s = line.trim();
+  if (s.startsWith("|")) s = s.slice(1);
+  if (s.endsWith("|")) s = s.slice(0, -1);
+  return s.split("|").map((c) => c.trim());
+}
 
-  // 粗体 **text**
-  html = html.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+function renderMarkdown(text) {
+  const lines = text.replace(/\r\n/g, "\n").split("\n");
+  const out = [];
+  let i = 0;
 
-  // 斜体 *text*
-  html = html.replace(/\*(.+?)\*/g, "<em>$1</em>");
+  while (i < lines.length) {
+    const line = lines[i];
 
-  // 换行
-  html = html.replace(/\n/g, "<br>");
+    // 代码块 ```
+    if (/^\s*```/.test(line)) {
+      const fence = line.match(/^\s*```(\w*)/);
+      const lang = fence ? fence[1] : "";
+      const codeLines = [];
+      i++;
+      while (i < lines.length && !/^\s*```/.test(lines[i])) {
+        codeLines.push(lines[i]);
+        i++;
+      }
+      i++; // 跳过结束 ```
+      out.push(`<pre><code class="language-${lang}">${escapeHtml(codeLines.join("\n"))}</code></pre>`);
+      continue;
+    }
 
-  return html;
+    // 标题
+    const h = line.match(/^(#{1,6})\s+(.*)$/);
+    if (h) {
+      const level = h[1].length;
+      out.push(`<h${level}>${renderInline(h[2])}</h${level}>`);
+      i++;
+      continue;
+    }
+
+    // 水平线
+    if (/^\s*([-*_])\1{2,}\s*$/.test(line)) {
+      out.push("<hr>");
+      i++;
+      continue;
+    }
+
+    // 引用块
+    if (/^\s*>\s?/.test(line)) {
+      const quote = [];
+      while (i < lines.length && /^\s*>\s?/.test(lines[i])) {
+        quote.push(lines[i].replace(/^\s*>\s?/, ""));
+        i++;
+      }
+      out.push(`<blockquote>${renderInline(quote.join("<br>"))}</blockquote>`);
+      continue;
+    }
+
+    // 无序列表
+    if (/^\s*[-*+]\s+/.test(line)) {
+      const items = [];
+      while (i < lines.length && /^\s*[-*+]\s+/.test(lines[i])) {
+        items.push(`<li>${renderInline(lines[i].replace(/^\s*[-*+]\s+/, ""))}</li>`);
+        i++;
+      }
+      out.push(`<ul>${items.join("")}</ul>`);
+      continue;
+    }
+
+    // 有序列表
+    if (/^\s*\d+\.\s+/.test(line)) {
+      const items = [];
+      while (i < lines.length && /^\s*\d+\.\s+/.test(lines[i])) {
+        items.push(`<li>${renderInline(lines[i].replace(/^\s*\d+\.\s+/, ""))}</li>`);
+        i++;
+      }
+      out.push(`<ol>${items.join("")}</ol>`);
+      continue;
+    }
+
+    // 表格（至少包含表头分隔行）
+    if (/\|/.test(line) && i + 1 < lines.length && /^\s*\|?[\s:|-]+\|[\s:|-]*$/.test(lines[i + 1]) && /-/.test(lines[i + 1])) {
+      const headerCells = splitRow(line);
+      i += 2; // 跳过表头 + 分隔行
+      const bodyRows = [];
+      while (i < lines.length && /\|/.test(lines[i]) && !/^\s*$/.test(lines[i])) {
+        bodyRows.push(splitRow(lines[i]));
+        i++;
+      }
+      let table = "<table><thead><tr>";
+      headerCells.forEach((c) => (table += `<th>${renderInline(c)}</th>`));
+      table += "</tr></thead><tbody>";
+      bodyRows.forEach((row) => {
+        table += "<tr>";
+        row.forEach((c) => (table += `<td>${renderInline(c)}</td>`));
+        table += "</tr>";
+      });
+      table += "</tbody></table>";
+      out.push(table);
+      continue;
+    }
+
+    // 空行
+    if (/^\s*$/.test(line)) {
+      i++;
+      continue;
+    }
+
+    // 普通段落（合并连续非空行）
+    const para = [];
+    while (
+      i < lines.length &&
+      !/^\s*$/.test(lines[i]) &&
+      !/^\s*```/.test(lines[i]) &&
+      !/^#{1,6}\s+/.test(lines[i]) &&
+      !/^\s*[-*+]\s+/.test(lines[i]) &&
+      !/^\s*\d+\.\s+/.test(lines[i]) &&
+      !/^\s*>\s?/.test(lines[i])
+    ) {
+      para.push(lines[i]);
+      i++;
+    }
+    out.push(`<p>${renderInline(para.join("<br>"))}</p>`);
+  }
+
+  return out.join("");
 }
 
 /* ========== 滚动 ========== */
@@ -1247,12 +1372,6 @@ function renderHeatmap(allMsgs) {
       ${[0, 1, 2, 3, 4].map((l) => `<span class="heatmap-cell l${l}"></span>`).join("")}
       多
     </div>`;
-}
-
-function escapeHtml(str) {
-  const div = document.createElement("div");
-  div.textContent = str;
-  return div.innerHTML;
 }
 
 /* ========== 设置弹窗 ========== */
