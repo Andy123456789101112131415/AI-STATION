@@ -670,20 +670,24 @@ function createThinkingSection() {
 }
 
 function appendMessageBubble(role, content, isStreaming = false, reasoning = "") {
+  // 统一角色：assistant 视为 ai
+  const isAI = role === "ai" || role === "assistant";
+  const displayRole = isAI ? "ai" : role;
+
   // 移除欢迎页
   const welcome = messages.querySelector(".welcome");
   if (welcome) welcome.remove();
 
   const div = document.createElement("div");
-  div.className = `message ${role}`;
+  div.className = `message ${displayRole}`;
 
   const label = document.createElement("span");
   label.className = "role-label";
-  label.textContent = role === "user" ? "你" : (getChatSettings().aiName || "AI");
+  label.textContent = isAI ? (getChatSettings().aiName || "AI") : "你";
   div.appendChild(label);
 
   let thinking = null;
-  if (role === "ai") {
+  if (isAI) {
     // 创建思考区域
     const ts = createThinkingSection();
     thinking = ts;
@@ -696,7 +700,7 @@ function appendMessageBubble(role, content, isStreaming = false, reasoning = "")
 
   const body = document.createElement("div");
   body.className = "message-body";
-  if (role === "ai") {
+  if (isAI) {
     body.innerHTML = renderMarkdown(content);
   } else {
     body.textContent = content;

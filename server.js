@@ -107,7 +107,12 @@ function serveStatic(res, filePath) {
   const mime = MIME[ext] || "application/octet-stream";
   try {
     const content = fs.readFileSync(filePath);
-    res.writeHead(200, { "Content-Type": mime });
+    res.writeHead(200, {
+      "Content-Type": mime,
+      "Cache-Control": "no-cache, no-store, must-revalidate",
+      "Pragma": "no-cache",
+      "Expires": "0",
+    });
     res.end(content);
   } catch {
     res.writeHead(404);
