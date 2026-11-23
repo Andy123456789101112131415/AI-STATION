@@ -788,6 +788,41 @@ body {
   color: #aaa;
 }
 
+/* 快速预设 */
+.preset-btns {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.preset-btn {
+  padding: 7px 14px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-size: 12px;
+  cursor: pointer;
+  transition: .15s;
+}
+.preset-btn:hover { border-color: var(--accent); color: var(--accent); background: #eef0ff; }
+.preset-btn.preset-recommend {
+  border-color: #22a699;
+  color: #22a699;
+  background: #eefaf7;
+  font-weight: 600;
+}
+.preset-hint {
+  font-size: 11px;
+  color: #aaa;
+  margin-top: 8px;
+}
+.preset-hint code {
+  background: rgba(79,110,247,.1);
+  padding: 1px 5px;
+  border-radius: 3px;
+  color: #4f6ef7;
+}
+
 /* 对比模型行 */
 .compare-model-row {
   border: 1px solid #e8eaf6;

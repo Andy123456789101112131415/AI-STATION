@@ -32,6 +32,15 @@ const btnAnalyze = $("#btnStats");
 const btnSaveSettings = $("#btnSaveSettings");
 const btnCloseModal = $("#btnCloseModal");
 
+// 快速预设：点击一键填入
+document.querySelectorAll(".preset-btn").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    settingAiName.value = btn.dataset.name || "";
+    settingApiUrl.value = btn.dataset.url || "";
+    settingModel.value = btn.dataset.model || "";
+  });
+});
+
 /* ========== 账号管理 ========== */
 const API = "http://localhost:3456";
 const SESSION_KEY = "ai_platform_session";
@@ -891,11 +900,6 @@ async function sendMessage() {
   if (!content) return;
 
   const settings = getChatSettings();
-  if (!settings.apiKey) {
-    alert("请先在设置中填写 API 密钥。");
-    openSettings();
-    return;
-  }
   if (!settings.apiUrl) {
     alert("请先在设置中填写 API 地址。");
     openSettings();
@@ -957,7 +961,7 @@ async function sendMessage() {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${settings.apiKey}`,
+        ...(settings.apiKey ? { Authorization: `Bearer ${settings.apiKey}` } : {}),
       },
       body: JSON.stringify({
         model: settings.model || "deepseek-chat",
@@ -1078,7 +1082,7 @@ async function streamApiCall(apiSettings, messagesToSend, onReasoning, onContent
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${apiSettings.apiKey}`,
+      ...(apiSettings.apiKey ? { Authorization: `Bearer ${apiSettings.apiKey}` } : {}),
     },
     body: JSON.stringify({
       model: apiSettings.model,

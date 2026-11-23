@@ -164,12 +164,24 @@
     <div class="modal modal-wide" id="settingsModal">
       <h3>API 设置（当前对话）</h3>
 
+      <!-- 快速预设 -->
+      <div class="modal-section">
+        <h4>快速预设（点击一键填入）</h4>
+        <div class="preset-btns">
+          <button type="button" class="preset-btn preset-recommend" data-name="Qwen2.5-3B · 本地" data-url="http://localhost:11434/v1/chat/completions" data-model="qwen2.5:3b">本地 Qwen2.5-3B（推荐 · 免费）</button>
+          <button type="button" class="preset-btn" data-name="DeepSeek" data-url="https://api.deepseek.com/v1/chat/completions" data-model="deepseek-chat">DeepSeek 云端</button>
+          <button type="button" class="preset-btn" data-name="GPT-4o-mini" data-url="https://api.openai.com/v1/chat/completions" data-model="gpt-4o-mini">OpenAI GPT-4o-mini</button>
+          <button type="button" class="preset-btn" data-name="Llama3.2-1B · 本地" data-url="http://localhost:11434/v1/chat/completions" data-model="llama3.2:1b">本地 Llama3.2-1B</button>
+        </div>
+        <p class="preset-hint">本地模型需先装 Ollama，运行 <code>ollama run qwen2.5:3b</code>，密钥留空即可</p>
+      </div>
+
       <!-- 基础配置 -->
       <div class="modal-section">
         <h4>基础配置</h4>
         <label>AI 名称 <input type="text" id="settingAiName" placeholder="例如：DeepSeek、GPT-4o" /></label>
         <label>API 地址 <input type="text" id="settingApiUrl" placeholder="https://api.deepseek.com/v1/chat/completions" /></label>
-        <label>API 密钥 <input type="password" id="settingApiKey" placeholder="sk-xxxxxxxxxxxxxxxx" /></label>
+        <label>API 密钥 <input type="password" id="settingApiKey" placeholder="sk-...（本地 Ollama 可留空）" /></label>
         <label>模型名称 <input type="text" id="settingModel" placeholder="deepseek-chat" /></label>
       </div>
 
