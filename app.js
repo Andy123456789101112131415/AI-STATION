@@ -16,6 +16,9 @@ const settingAiName = $("#settingAiName");
 const settingApiUrl = $("#settingApiUrl");
 const settingApiKey = $("#settingApiKey");
 const settingModel = $("#settingModel");
+const settingTemperature = $("#settingTemperature");
+const settingTopP = $("#settingTopP");
+const settingMaxTokens = $("#settingMaxTokens");
 const settingMultiModel = $("#settingMultiModel");
 const settingHistoryAnalysis = $("#settingStats");
 const cmp1Name = $("#cmp1Name"); const cmp1Url = $("#cmp1Url");
@@ -463,7 +466,7 @@ function renderAccountUI() {
   accountName.innerHTML = (currentAccount.displayName || currentAccount.username) + vipLabel;
   loginOverlay.classList.remove("show");
 
-  if (!isVip() && !vipJustUpgraded) {
+  if (!DISABLE_LOGIN && !isVip() && !vipJustUpgraded) {
     setTimeout(() => showVipModal(), 600);
   }
 }
@@ -492,6 +495,9 @@ function defaultSettings() {
     apiUrl: "https://api.deepseek.com/v1/chat/completions",
     apiKey: "",
     model: "deepseek-chat",
+    temperature: 0.7,
+    topP: 1,
+    maxTokens: "",
     enableMultiModel: false,
     enableStats: false,
     compareModels: [
@@ -957,6 +963,9 @@ async function sendMessage() {
         model: settings.model || "deepseek-chat",
         messages: apiMessages,
         stream: true,
+        temperature: settings.temperature != null ? settings.temperature : 0.7,
+        top_p: settings.topP != null ? settings.topP : 1,
+        ...(settings.maxTokens ? { max_tokens: settings.maxTokens } : {}),
       }),
     });
 
@@ -1075,6 +1084,9 @@ async function streamApiCall(apiSettings, messagesToSend, onReasoning, onContent
       model: apiSettings.model,
       messages: messagesToSend,
       stream: true,
+      temperature: apiSettings.temperature != null ? apiSettings.temperature : 0.7,
+      top_p: apiSettings.topP != null ? apiSettings.topP : 1,
+      ...(apiSettings.maxTokens ? { max_tokens: apiSettings.maxTokens } : {}),
     }),
   });
 
@@ -1151,6 +1163,9 @@ async function sendCompareMessages(content) {
     apiUrl: settings.apiUrl,
     apiKey: settings.apiKey,
     model: settings.model,
+    temperature: settings.temperature,
+    topP: settings.topP,
+    maxTokens: settings.maxTokens,
   };
 
   const allModels = [mainSettings, ...cms];
@@ -1387,6 +1402,9 @@ function openSettings() {
   settingApiUrl.value = s.apiUrl || "";
   settingApiKey.value = s.apiKey || "";
   settingModel.value = s.model || "";
+  settingTemperature.value = s.temperature != null ? s.temperature : 0.7;
+  settingTopP.value = s.topP != null ? s.topP : 1;
+  settingMaxTokens.value = s.maxTokens || "";
   settingMultiModel.checked = !!s.enableMultiModel;
   settingHistoryAnalysis.checked = !!s.enableStats;
   // 对比模型
@@ -1414,6 +1432,9 @@ function saveSettings() {
   chat.settings.apiUrl = settingApiUrl.value.trim();
   chat.settings.apiKey = settingApiKey.value.trim();
   chat.settings.model = settingModel.value.trim() || "deepseek-chat";
+  chat.settings.temperature = settingTemperature.value === "" ? 0.7 : parseFloat(settingTemperature.value);
+  chat.settings.topP = settingTopP.value === "" ? 1 : parseFloat(settingTopP.value);
+  chat.settings.maxTokens = settingMaxTokens.value === "" ? "" : parseInt(settingMaxTokens.value, 10);
   chat.settings.enableMultiModel = settingMultiModel.checked;
   chat.settings.enableStats = settingHistoryAnalysis.checked;
   chat.settings.compareModels = [
@@ -1469,8 +1490,15 @@ document.addEventListener("keydown", (e) => {
 /* ========== 启动 ========== */
 let vipJustUpgraded = false;
 
+const DISABLE_LOGIN = true; // 关闭登录：自动使用游客账号
+
 async function initApp() {
-  const session = getSession();
+  let session = getSession();
+  if (!session && DISABLE_LOGIN) {
+    // 自动创建游客会话
+    session = { accountId: "guest", loginTime: Date.now() };
+    setSession("guest");
+  }
   if (!session) {
     loginOverlay.classList.add("show");
     renderAccountUI();

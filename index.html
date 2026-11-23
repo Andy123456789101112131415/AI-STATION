@@ -173,6 +173,20 @@
         <label>模型名称 <input type="text" id="settingModel" placeholder="deepseek-chat" /></label>
       </div>
 
+      <!-- 生成参数 -->
+      <div class="modal-section">
+        <h4>生成参数</h4>
+        <label>Temperature（0 严谨 ~ 2 发散）
+          <input type="number" id="settingTemperature" min="0" max="2" step="0.1" placeholder="0.7" />
+        </label>
+        <label>Top P（0 ~ 1，核心采样）
+          <input type="number" id="settingTopP" min="0" max="1" step="0.05" placeholder="1" />
+        </label>
+        <label>Max Tokens（最大回复长度，留空为默认）
+          <input type="number" id="settingMaxTokens" min="1" step="1" placeholder="4096" />
+        </label>
+      </div>
+
       <!-- 功能开关 -->
       <div class="modal-section">
         <h4>功能开关</h4>

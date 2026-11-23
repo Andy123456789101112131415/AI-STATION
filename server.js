@@ -221,7 +221,17 @@ const server = http.createServer((req, res) => {
       try {
         const { accountId } = JSON.parse(body);
         const accounts = loadAccounts();
-        const acc = accounts[accountId];
+        let acc = accounts[accountId];
+        // 游客账号自动创建（VIP免限制）
+        if (!acc && accountId === "guest") {
+          acc = {
+            id: "guest", username: "guest", displayName: "游客",
+            passwordHash: "", createdAt: Date.now(),
+            tier: "vip_lifetime", messageCountToday: 0, lastMessageDate: "",
+          };
+          accounts.guest = acc;
+          saveAccounts(accounts);
+        }
         if (!acc) { resJSON(404, { error: "账号不存在" }); return; }
         // 检查VIP过期
         if (acc.tier === "vip_monthly" && acc.vipExpiry && acc.vipExpiry <= Date.now()) {
