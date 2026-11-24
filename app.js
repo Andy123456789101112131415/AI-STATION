@@ -659,8 +659,8 @@ function renderMessages() {
     return;
   }
 
-  chat.messages.forEach((msg) => {
-    appendMessageBubble(msg.role, msg.content, false, msg.reasoning || "");
+  chat.messages.forEach((msg, idx) => {
+    appendMessageBubble(msg.role, msg.content, false, msg.reasoning || "", idx);
   });
   scrollToBottom(true);
 }
@@ -684,7 +684,7 @@ function createThinkingSection() {
   return { section, header, body };
 }
 
-function appendMessageBubble(role, content, isStreaming = false, reasoning = "") {
+function appendMessageBubble(role, content, isStreaming = false, reasoning = "", msgIndex = null) {
   // 统一角色：assistant 视为 ai
   const isAI = role === "ai" || role === "assistant";
   const displayRole = isAI ? "ai" : role;
@@ -695,6 +695,7 @@ function appendMessageBubble(role, content, isStreaming = false, reasoning = "")
 
   const div = document.createElement("div");
   div.className = `message ${displayRole}`;
+  if (msgIndex != null) div.dataset.msgIndex = msgIndex;
 
   const label = document.createElement("span");
   label.className = "role-label";
@@ -729,9 +730,88 @@ function appendMessageBubble(role, content, isStreaming = false, reasoning = "")
   }
 
   div.appendChild(body);
+
+  // 用户消息：添加“编辑”按钮，可改问题并回溯重发
+  if (!isAI && msgIndex != null) {
+    const editBtn = document.createElement("button");
+    editBtn.className = "msg-edit-btn";
+    editBtn.title = "编辑此问题并重新生成";
+    editBtn.textContent = "✎";
+    editBtn.addEventListener("click", () => startEditMessage(msgIndex));
+    div.appendChild(editBtn);
+  }
+
   messages.appendChild(div);
   scrollToBottom(true);
   return { div, body, thinking };
+}
+
+// 编辑某条用户消息，回溯截断后重新生成
+function startEditMessage(idx) {
+  const chat = getActiveChat();
+  if (!chat) return;
+  const msg = chat.messages[idx];
+  if (!msg || msg.role !== "user") return;
+
+  const div = messages.querySelector(`.message.user[data-msg-index="${idx}"]`);
+  if (!div || div.querySelector(".edit-box")) return;
+  const body = div.querySelector(".message-body");
+
+  const box = document.createElement("div");
+  box.className = "edit-box";
+
+  const ta = document.createElement("textarea");
+  ta.value = msg.content;
+  ta.rows = Math.min(6, Math.max(1, msg.content.split("\n").length));
+
+  const actions = document.createElement("div");
+  actions.className = "edit-actions";
+  const saveBtn = document.createElement("button");
+  saveBtn.className = "btn-sm btn-primary";
+  saveBtn.textContent = "保存并重发";
+  const cancelBtn = document.createElement("button");
+  cancelBtn.className = "btn-sm btn-secondary";
+  cancelBtn.textContent = "取消";
+  actions.appendChild(saveBtn);
+  actions.appendChild(cancelBtn);
+
+  box.appendChild(ta);
+  box.appendChild(actions);
+
+  body.style.display = "none";
+  div.appendChild(box);
+  ta.focus();
+  ta.setSelectionRange(ta.value.length, ta.value.length);
+
+  const cancel = () => { box.remove(); body.style.display = ""; };
+  cancelBtn.addEventListener("click", cancel);
+
+  const doSave = async () => {
+    const val = ta.value.trim();
+    if (!val) { ta.focus(); return; }
+    if (val === msg.content) { cancel(); return; }
+    await editAndResend(idx, val);
+  };
+  saveBtn.addEventListener("click", doSave);
+  ta.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); doSave(); }
+    else if (e.key === "Escape") cancel();
+  });
+}
+
+async function editAndResend(idx, newContent) {
+  const chat = getActiveChat();
+  if (!chat) return;
+  const settings = getChatSettings();
+  if (!settings.apiUrl) { alert("请先在设置中填写 API 地址。"); openSettings(); return; }
+
+  // 记忆倒退：丢弃 idx 及其之后的所有消息，用编辑后的内容替换
+  chat.messages = chat.messages.slice(0, idx);
+  chat.messages.push({ role: "user", content: newContent, timestamp: Date.now() });
+  saveState(state);
+
+  renderMessages();       // 重新渲染截断后的历史
+  await generateReply();  // 从这条重新生成
 }
 
 /* ========== 简易 Markdown 渲染 ========== */
@@ -960,9 +1040,10 @@ async function sendMessage() {
   }
 
   // 添加用户消息
+  const idx = chat.messages.length;
   chat.messages.push({ role: "user", content, timestamp: Date.now() });
   incrementMsgCount();
-  appendMessageBubble("user", content);
+  appendMessageBubble("user", content, false, "", idx);
   userInput.value = "";
   userInput.style.height = "auto";
 
@@ -985,11 +1066,20 @@ async function sendMessage() {
     return;
   }
 
+  await generateReply();
+}
+
+// 基于当前 chat.messages 生成 AI 回复（假设最后一条是用户消息）
+async function generateReply() {
+  const settings = getChatSettings();
+  const chat = getActiveChat();
+  if (!chat) return;
+
   // 禁用输入
   setInputEnabled(false);
 
   // 创建 AI 消息气泡（流式）
-  const { div: aiDiv, body: aiBody, thinking } = appendMessageBubble("ai", "", true);
+  const { body: aiBody, thinking } = appendMessageBubble("ai", "", true);
 
   // 构建消息历史
   const apiMessages = chat.messages
@@ -1045,7 +1135,7 @@ async function sendMessage() {
           const delta = json.choices?.[0]?.delta;
           if (!delta) continue;
 
-          // 思考内容 (DeepSeek R1 等模型的 reasoning_content)
+          // 思考内容
           if (delta.reasoning_content) {
             fullReasoning += delta.reasoning_content;
             if (thinking) {
@@ -1057,7 +1147,6 @@ async function sendMessage() {
 
           // 正文内容
           if (delta.content) {
-            // 思考结束，折叠思考区域
             if (!thinkingDone && fullReasoning && thinking) {
               thinkingDone = true;
               thinking.section.classList.add("collapsed");
@@ -1077,11 +1166,9 @@ async function sendMessage() {
     // 流结束
     aiBody.classList.remove("streaming-cursor");
 
-    // 如果没有思考内容，移除空的思考区域
     if (!fullReasoning && thinking) {
       thinking.section.remove();
     }
-    // 如果只有思考没有正文
     if (!fullContent && fullReasoning) {
       aiBody.innerHTML = renderMarkdown(fullReasoning);
       thinking.section.remove();
@@ -1092,7 +1179,6 @@ async function sendMessage() {
       aiBody.innerHTML = "(AI 未返回内容)";
     }
 
-    // 渲染最终内容的数学公式
     renderMath(aiBody);
     if (thinking && fullReasoning) renderMath(thinking.body);
 
