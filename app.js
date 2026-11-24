@@ -708,15 +708,18 @@ function appendMessageBubble(role, content, isStreaming = false, reasoning = "")
     thinking = ts;
     if (reasoning) {
       ts.body.innerHTML = renderMarkdown(reasoning);
+      renderMath(ts.body);
       ts.header.innerHTML = `<span class="thinking-icon">&#9660;</span> 思考过程`;
     }
-    div.appendChild(ts.section);
+    // 仅在有思考内容或正在流式时插入，避免历史消息出现空的“思考中”
+    if (isStreaming || reasoning) div.appendChild(ts.section);
   }
 
   const body = document.createElement("div");
   body.className = "message-body";
   if (isAI) {
     body.innerHTML = renderMarkdown(content);
+    renderMath(body);
   } else {
     body.textContent = content;
   }
@@ -787,6 +790,26 @@ function renderMarkdown(text) {
       continue;
     }
 
+    // 显示数学 \[ ... \]
+    if (/^\s*\\\[/.test(line)) {
+      let mathSrc = line.replace(/^\s*\\\[/, "");
+      i++;
+      if (/\\\]\s*$/.test(mathSrc)) {
+        mathSrc = mathSrc.replace(/\\\]\s*$/, "");
+      } else {
+        while (i < lines.length && !/\\\]/.test(lines[i])) {
+          mathSrc += " " + lines[i];
+          i++;
+        }
+        if (i < lines.length) {
+          mathSrc += " " + lines[i].replace(/\\\][\s\S]*$/, "");
+          i++;
+        }
+      }
+      out.push(`<div class="math-display">\\[${escapeHtml(mathSrc.trim())}\\]</div>`);
+      continue;
+    }
+
     // 标题
     const h = line.match(/^(#{1,6})\s+(.*)$/);
     if (h) {
@@ -810,7 +833,7 @@ function renderMarkdown(text) {
         quote.push(lines[i].replace(/^\s*>\s?/, ""));
         i++;
       }
-      out.push(`<blockquote>${renderInline(quote.join("<br>"))}</blockquote>`);
+      out.push(`<blockquote>${quote.map(renderInline).join("<br>")}</blockquote>`);
       continue;
     }
 
@@ -870,6 +893,7 @@ function renderMarkdown(text) {
       i < lines.length &&
       !/^\s*$/.test(lines[i]) &&
       !/^\s*```/.test(lines[i]) &&
+      !/^\s*\\\[/.test(lines[i]) &&
       !/^#{1,6}\s+/.test(lines[i]) &&
       !/^\s*[-*+]\s+/.test(lines[i]) &&
       !/^\s*\d+\.\s+/.test(lines[i]) &&
@@ -878,10 +902,26 @@ function renderMarkdown(text) {
       para.push(lines[i]);
       i++;
     }
-    out.push(`<p>${renderInline(para.join("<br>"))}</p>`);
+    out.push(`<p>${para.map(renderInline).join("<br>")}</p>`);
   }
 
   return out.join("");
+}
+
+// 数学公式渲染（KaTeX）
+function renderMath(el) {
+  if (!el || typeof window.renderMathInElement !== "function") return;
+  try {
+    window.renderMathInElement(el, {
+      delimiters: [
+        { left: "\\[", right: "\\]", display: true },
+        { left: "$$", right: "$$", display: true },
+        { left: "\\(", right: "\\)", display: false },
+        { left: "$", right: "$", display: false },
+      ],
+      throwOnError: false,
+    });
+  } catch (e) { /* ignore */ }
 }
 
 /* ========== 滚动 ========== */
@@ -1051,6 +1091,10 @@ async function sendMessage() {
     if (!fullContent && !fullReasoning) {
       aiBody.innerHTML = "(AI 未返回内容)";
     }
+
+    // 渲染最终内容的数学公式
+    renderMath(aiBody);
+    if (thinking && fullReasoning) renderMath(thinking.body);
 
     const msg = { role: "assistant", content: fullContent, timestamp: Date.now() };
     if (fullReasoning) msg.reasoning = fullReasoning;
@@ -1222,6 +1266,7 @@ async function sendCompareMessages(content) {
         }
       );
       if (!result) result = "(未返回内容)";
+      renderMath(body);
       return { role: "assistant", content: result, reasoning, modelName: model.aiName };
     } catch (err) {
       body.innerHTML = `<span style="color:var(--danger)">错误：${escapeHtml(err.message)}</span>`;

@@ -538,6 +538,15 @@ body {
   line-height: 1.5;
 }
 
+/* 数学公式 */
+.message.ai .katex-display,
+.message.ai .math-display {
+  margin: 8px 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+.message.ai .katex { font-size: 1.05em; }
+
 /* ========== 思考过程区域 ========== */
 .thinking-section {
   margin-bottom: 10px;
