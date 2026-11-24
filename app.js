@@ -19,6 +19,7 @@ const settingModel = $("#settingModel");
 const settingTemperature = $("#settingTemperature");
 const settingTopP = $("#settingTopP");
 const settingMaxTokens = $("#settingMaxTokens");
+const settingSystemPrompt = $("#settingSystemPrompt");
 const settingMultiModel = $("#settingMultiModel");
 const settingHistoryAnalysis = $("#settingStats");
 const cmp1Name = $("#cmp1Name"); const cmp1Url = $("#cmp1Url");
@@ -40,6 +41,17 @@ document.querySelectorAll(".preset-btn").forEach((btn) => {
     settingModel.value = btn.dataset.model || "";
   });
 });
+
+// 联网搜索开关
+let webSearchMode = false;
+const btnWebSearch = $("#btnWebSearch");
+if (btnWebSearch) {
+  btnWebSearch.addEventListener("click", () => {
+    webSearchMode = !webSearchMode;
+    btnWebSearch.classList.toggle("active", webSearchMode);
+    btnWebSearch.textContent = webSearchMode ? "联网搜索：开" : "联网搜索";
+  });
+}
 
 /* ========== 账号管理 ========== */
 const API = "http://localhost:3456";
@@ -507,6 +519,7 @@ function defaultSettings() {
     temperature: 0.7,
     topP: 1,
     maxTokens: "",
+    systemPrompt: "",
     enableMultiModel: false,
     enableStats: false,
     compareModels: [
@@ -544,9 +557,8 @@ function applySettingsToUI() {
   settingApiUrl.value = s.apiUrl || "";
   settingApiKey.value = s.apiKey || "";
   settingModel.value = s.model || "";
-  // 工具栏可见性
-  const anyOn = s.enableMultiModel || s.enableStats;
-  inputToolbar.style.display = anyOn ? "flex" : "none";
+  // 工具栏可见性（联网搜索常驻，多模型/统计按设置显示）
+  inputToolbar.style.display = "flex";
   btnCompare.style.display = s.enableMultiModel ? "" : "none";
   btnAnalyze.style.display = s.enableStats ? "" : "none";
   updateCompareBtnState();
@@ -1084,10 +1096,34 @@ async function generateReply() {
   // 创建 AI 消息气泡（流式）
   const { body: aiBody, thinking } = appendMessageBubble("ai", "", true);
 
-  // 构建消息历史
-  const apiMessages = chat.messages
+  // 联网搜索（可选）
+  let searchContext = "";
+  if (typeof webSearchMode !== "undefined" && webSearchMode) {
+    const lastUser = [...chat.messages].reverse().find((m) => m.role === "user");
+    if (lastUser) {
+      aiBody.innerHTML = "<em>正在联网搜索…</em>";
+      try {
+        const r = await apiCall("/api/search", { query: lastUser.content });
+        if (r && Array.isArray(r.results) && r.results.length) {
+          searchContext = r.results
+            .map((it, i) => `[${i + 1}] ${it.title}\n${it.snippet}\n${it.url}`)
+            .join("\n\n");
+        }
+      } catch { /* 搜索失败则忽略 */ }
+      aiBody.innerHTML = "";
+      aiBody.classList.add("streaming-cursor");
+    }
+  }
+
+  // 构建消息历史（含系统提示 + 搜索结果）
+  const sysParts = [];
+  if (settings.systemPrompt && settings.systemPrompt.trim()) sysParts.push(settings.systemPrompt.trim());
+  if (searchContext) sysParts.push(`你可以参考以下联网搜索结果回答用户问题，并在合适处引用来源链接：\n\n${searchContext}`);
+  const apiMessages = [];
+  if (sysParts.length) apiMessages.push({ role: "system", content: sysParts.join("\n\n") });
+  chat.messages
     .filter((m) => m.role !== "system")
-    .map((m) => ({ role: m.role, content: m.content }));
+    .forEach((m) => apiMessages.push({ role: m.role, content: m.content }));
 
   try {
     const response = await fetch(settings.apiUrl, {
@@ -1543,6 +1579,7 @@ function openSettings() {
   settingTemperature.value = s.temperature != null ? s.temperature : 0.7;
   settingTopP.value = s.topP != null ? s.topP : 1;
   settingMaxTokens.value = s.maxTokens || "";
+  settingSystemPrompt.value = s.systemPrompt || "";
   settingMultiModel.checked = !!s.enableMultiModel;
   settingHistoryAnalysis.checked = !!s.enableStats;
   // 对比模型
@@ -1573,6 +1610,7 @@ function saveSettings() {
   chat.settings.temperature = settingTemperature.value === "" ? 0.7 : parseFloat(settingTemperature.value);
   chat.settings.topP = settingTopP.value === "" ? 1 : parseFloat(settingTopP.value);
   chat.settings.maxTokens = settingMaxTokens.value === "" ? "" : parseInt(settingMaxTokens.value, 10);
+  chat.settings.systemPrompt = settingSystemPrompt.value.trim();
   chat.settings.enableMultiModel = settingMultiModel.checked;
   chat.settings.enableStats = settingHistoryAnalysis.checked;
   chat.settings.compareModels = [

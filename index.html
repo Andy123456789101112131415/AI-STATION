@@ -58,7 +58,8 @@
     <!-- 输入区 -->
     <footer class="input-area">
       <!-- 工具栏 -->
-      <div class="input-toolbar" id="inputToolbar" style="display:none">
+      <div class="input-toolbar" id="inputToolbar">
+        <button class="toolbar-btn" id="btnWebSearch" title="开启后联网搜索再回答">联网搜索</button>
         <button class="toolbar-btn" id="btnCompare" title="多模型对比">多模型对比</button>
         <button class="toolbar-btn" id="btnStats" title="使用统计">使用统计</button>
       </div>
@@ -200,6 +201,14 @@
         </label>
         <label>Max Tokens（最大回复长度，留空为默认）
           <input type="number" id="settingMaxTokens" min="1" step="1" placeholder="4096" />
+        </label>
+      </div>
+
+      <!-- 调教 / 系统提示 -->
+      <div class="modal-section">
+        <h4>调教（系统提示词）</h4>
+        <label>设定 AI 的人设、语气、规则（可选）
+          <textarea id="settingSystemPrompt" rows="3" placeholder="例如：你是一个严谨、简洁的助手，回答先给结论再解释……"></textarea>
         </label>
       </div>
 

@@ -45,6 +45,56 @@ function hashPassword(pwd) {
   return crypto.createHash("sha256").update("salt_" + pwd).digest("hex");
 }
 
+// ========== 联网搜索（DuckDuckGo 代理） ==========
+function decodeHtmlEnt(s) {
+  return s
+    .replace(/&#x([0-9a-f]+);/gi, (_, h) => String.fromCharCode(parseInt(h, 16)))
+    .replace(/&#(\d+);/g, (_, d) => String.fromCharCode(parseInt(d, 10)))
+    .replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"').replace(/&#x27;/g, "'").replace(/&#39;/g, "'")
+    .replace(/&ensp;/g, " ").replace(/&nbsp;/g, " ").replace(/&mdash;/g, "—").replace(/&hellip;/g, "…")
+    .replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim();
+}
+
+function searchWeb(query) {
+  return new Promise((resolve) => {
+    const q = encodeURIComponent(query);
+    const options = {
+      hostname: "cn.bing.com",
+      path: "/search?q=" + q + "&mkt=zh-CN&setlang=zh",
+      method: "GET",
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36",
+        "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+      },
+    };
+    const r = https.request(options, (res) => {
+      let data = "";
+      res.setEncoding("utf8");
+      res.on("data", (c) => (data += c));
+      res.on("end", () => {
+        const results = [];
+        const blocks = data.match(/<li class="b_algo"[\s\S]*?<\/li>/g) || [];
+        for (const b of blocks) {
+          const a = b.match(/<h2[^>]*>\s*<a[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/);
+          if (!a) continue;
+          const p = b.match(/<p[^>]*>([\s\S]*?)<\/p>/);
+          results.push({
+            title: decodeHtmlEnt(a[2]),
+            url: a[1],
+            snippet: p ? decodeHtmlEnt(p[1]).slice(0, 160) : "",
+          });
+          if (results.length >= 6) break;
+        }
+        resolve(results);
+      });
+    });
+    r.on("error", () => resolve([]));
+    r.setTimeout(8000, () => { r.destroy(); resolve([]); });
+    r.end();
+  });
+}
+
 // ========== 工具函数 ==========
 function isPayConfigured() {
   return PAYJS_MCHID !== "你的商户号" && PAYJS_KEY !== "你的密钥" && PAYJS_MCHID && PAYJS_KEY;
@@ -257,6 +307,20 @@ const server = http.createServer((req, res) => {
         saveAccounts(accounts);
         resJSON(200, { success: true });
       } catch (e) { resJSON(400, { error: e.message }); }
+    });
+    return;
+  }
+
+  // ========== 联网搜索 API ==========
+  if (url.pathname === "/api/search" && req.method === "POST") {
+    let body = "";
+    req.on("data", (c) => (body += c));
+    req.on("end", async () => {
+      try {
+        const { query } = JSON.parse(body);
+        const results = await searchWeb(String(query || ""));
+        resJSON(200, { results });
+      } catch (e) { resJSON(200, { results: [], error: e.message }); }
     });
     return;
   }

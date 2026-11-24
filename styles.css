@@ -823,6 +823,20 @@ body {
   transition: border-color .2s;
 }
 .modal label input:focus { border-color: var(--accent); }
+.modal label textarea {
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-size: 14px;
+  font-family: inherit;
+  line-height: 1.5;
+  outline: none;
+  resize: vertical;
+  transition: border-color .2s;
+}
+.modal label textarea:focus { border-color: var(--accent); }
 
 /* 复选框 */
 .checkbox-label {
