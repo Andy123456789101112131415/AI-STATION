@@ -420,6 +420,13 @@ body {
   border-bottom-right-radius: 4px;
   position: relative;
 }
+.message.user.editable {
+  cursor: text;
+  transition: box-shadow .15s;
+}
+.message.user.editable:hover {
+  box-shadow: 0 0 0 2px rgba(255,255,255,.5), 0 2px 8px rgba(79,110,247,.35);
+}
 .msg-edit-btn {
   position: absolute;
   top: -10px;

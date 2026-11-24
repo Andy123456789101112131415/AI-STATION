@@ -731,14 +731,14 @@ function appendMessageBubble(role, content, isStreaming = false, reasoning = "",
 
   div.appendChild(body);
 
-  // 用户消息：添加“编辑”按钮，可改问题并回溯重发
+  // 用户消息：直接点击文字即可编辑并回溯重发
   if (!isAI && msgIndex != null) {
-    const editBtn = document.createElement("button");
-    editBtn.className = "msg-edit-btn";
-    editBtn.title = "编辑此问题并重新生成";
-    editBtn.textContent = "✎";
-    editBtn.addEventListener("click", () => startEditMessage(msgIndex));
-    div.appendChild(editBtn);
+    div.classList.add("editable");
+    div.title = "点击编辑此问题并重新生成";
+    div.addEventListener("click", () => {
+      if (div.querySelector(".edit-box")) return; // 已在编辑中
+      startEditMessage(msgIndex);
+    });
   }
 
   messages.appendChild(div);
@@ -777,6 +777,9 @@ function startEditMessage(idx) {
 
   box.appendChild(ta);
   box.appendChild(actions);
+
+  // 阻止点击编辑框时冒泡触发外层重新进入编辑
+  box.addEventListener("click", (e) => e.stopPropagation());
 
   body.style.display = "none";
   div.appendChild(box);
